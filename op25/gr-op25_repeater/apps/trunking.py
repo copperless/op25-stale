@@ -263,7 +263,7 @@ class trunked_system (object):
         #if crc16(tsbk, 12) != 0:
         #    self.stats['crc'] += 1
         #    return	# crc check failed
-        tsbk = tsbk << 16	# for missing crc
+        #tsbk = tsbk << 16	# for missing crc
         opcode = (tsbk >> 88) & 0x3f
         if self.debug > 10:
             print "TSBK: 0x%02x 0x%024x" % (opcode, tsbk)

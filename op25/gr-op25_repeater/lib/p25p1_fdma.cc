@@ -275,7 +275,7 @@ p25p1_fdma::rx_sym (const uint8_t *syms, int nsyms)
 				if (framer->frame_size >= sizes[sz]) {
 					rc[sz] = block_deinterleave(bv1,48+64+sz*196  , deinterleave_buf[sz]);
 					if (framer->duid == 0x07 && rc[sz] == 0)
-						process_duid(framer->duid, framer->nac, deinterleave_buf[sz], 10);
+						process_duid(framer->duid, framer->nac, deinterleave_buf[sz], 12);
 				}
 			}
 			// two-block mbt is the only format currently supported
@@ -283,11 +283,9 @@ p25p1_fdma::rx_sym (const uint8_t *syms, int nsyms)
 			&& framer->frame_size == 576
 			&& rc[0] == 0
 			&& rc[1] == 0) {
-				// we copy first 10 bytes from first and 
-				// first 8 from second (removes CRC's)
-				uint8_t mbt_block[18];
-				memcpy(mbt_block, deinterleave_buf[0], 10);
-				memcpy(&mbt_block[10], deinterleave_buf[1], 8);
+				uint8_t mbt_block[24];
+				memcpy(mbt_block, deinterleave_buf[0], 12);
+				memcpy(&mbt_block[12], deinterleave_buf[1], 12);
 				process_duid(framer->duid, framer->nac, mbt_block, sizeof(mbt_block));
 			}
 		}
