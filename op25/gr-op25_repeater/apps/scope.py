@@ -658,7 +658,7 @@ class p25_rx_block (stdgui2.std_top_block):
                 callback=self.set_audio_scaler)
         if self.rtl_found:
             myform['ppm'] = form.slider_field(parent=self.panel, sizer=vbox_sliders, label="PPM",
-                weight=0, min=0, max=120, value=self.options.freq_corr,
+                weight=0, min=-120, max=120, value=self.options.freq_corr,
                 callback=self.set_rtl_ppm)
         if (self.options.vocoder or self.options.phase2_tdma) or self.rtl_found:
             hbox.Add(vbox_sliders, 0, 0)
