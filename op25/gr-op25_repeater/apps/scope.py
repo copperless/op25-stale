@@ -811,6 +811,8 @@ class p25_rx_block (stdgui2.std_top_block):
              self.connect_fsk4_demod()
         elif notebook_sel == 3:	# constellation
              self.connect_psk_demod()
+        if notebook_sel == 5 or notebook_sel == 7:	# fixes crash
+             self.connect_demods()
 
         self.unlock()
 
