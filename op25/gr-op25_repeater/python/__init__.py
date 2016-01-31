@@ -46,6 +46,7 @@ from op25_repeater_swig import *
 
 # import any pure python here
 #
+from p25_demodulator import *
 
 # ----------------------------------------------------------------
 # Tail of workaround
