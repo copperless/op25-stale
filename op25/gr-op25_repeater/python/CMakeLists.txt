@@ -32,6 +32,7 @@ GR_PYTHON_INSTALL(
     FILES
     __init__.py
     p25_demodulator.py
+    op25_c4fm_mod.py
     DESTINATION ${GR_PYTHON_DIR}/op25_repeater
 )
 

@@ -1,0 +1,58 @@
+<?xml version="1.0"?>
+<block>
+    <name>P25 Demodulator</name>
+    <key>p25_demod</key>
+    <category>op25_repeater</category>
+    <import>import op25_repeater</import>
+    <make>op25_repeater.p25_demod_$(type)($if_rate, $sym_rate)</make>
+    <callback>set_relative_frequency($freq)</callback>
+    <callback>set_omega($omega)</callback>
+    <param>
+        <name>Demod Type</name>
+        <key>type</key>
+        <value>cb</value>
+        <type>enum</type>
+        <option>
+            <name>CQPSK</name>
+            <key>cb</key>
+            <opt>input:complex</opt>
+            <opt>output:byte</opt>
+        </option>
+        <option>
+            <name>C4FM</name>
+            <key>fb</key>
+            <opt>input:float</opt>
+            <opt>output:byte</opt>
+        </option>
+    </param>
+    <param>
+        <name>IF Rate</name>
+        <key>if_rate</key>
+        <value>if_rate</value>
+        <type>int</type>
+    </param>
+    <param>
+        <name>Symbol Rate</name>
+        <key>sym_rate</key>
+        <value>4800</value>
+        <type>int</type>
+        <hide>#if str($type).startswith('cb') then 'none' else 'all'#</hide>
+        <option>
+            <name>4.8k</name>
+            <key>4800</key>
+        </option>
+        <option>
+            <name>6.0k</name>
+            <key>6000</key>
+        </option>
+    </param>
+    <check>($if_rate)%(48000) == 0</check>
+    <sink>
+        <name>in</name>
+        <type>$type.input</type>
+    </sink>
+    <source>
+        <name>out</name>
+        <type>$type.output</type>
+    </source>
+</block>
