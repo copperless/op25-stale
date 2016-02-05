@@ -48,6 +48,21 @@
         <value>-(2 * math.pi * 2400 / float(48000))</value>
         <type>float</type>
     </param>
+  <param>
+        <name>Show Msg Ports</name>
+        <key>showports</key>
+        <value>True</value>
+        <type>enum</type>
+        <hide>part</hide>
+        <option>
+            <name>Yes</name>
+            <key>False</key>
+        </option>
+        <option>
+            <name>No</name>
+            <key>True</key>
+        </option>
+    </param>
     <sink>
         <name>in</name>
         <type>complex</type>
@@ -56,6 +71,12 @@
         <name>out</name>
         <type>complex</type>
     </source>  
+    <source>
+        <name>freq</name>
+        <type>message</type>
+        <optional>1</optional>
+        <hide>$showports</hide>
+    </source>
     <doc>
 This implements a Gardner discrete-time error-tracking synchronizer.
     </doc>

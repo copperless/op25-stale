@@ -463,33 +463,6 @@
     </param>
     <param>
       <key>_enabled</key>
-      <value>True</value>
-    </param>
-    <param>
-      <key>_coordinate</key>
-      <value>(79, 435)</value>
-    </param>
-    <param>
-      <key>_rotation</key>
-      <value>0</value>
-    </param>
-    <param>
-      <key>id</key>
-      <value>variable_0</value>
-    </param>
-    <param>
-      <key>value</key>
-      <value>0</value>
-    </param>
-  </block>
-  <block>
-    <key>variable</key>
-    <param>
-      <key>comment</key>
-      <value></value>
-    </param>
-    <param>
-      <key>_enabled</key>
       <value>1</value>
     </param>
     <param>
@@ -557,37 +530,6 @@
     </param>
   </block>
   <block>
-    <key>blocks_message_debug</key>
-    <param>
-      <key>alias</key>
-      <value></value>
-    </param>
-    <param>
-      <key>comment</key>
-      <value></value>
-    </param>
-    <param>
-      <key>affinity</key>
-      <value></value>
-    </param>
-    <param>
-      <key>_enabled</key>
-      <value>0</value>
-    </param>
-    <param>
-      <key>_coordinate</key>
-      <value>(302, 378)</value>
-    </param>
-    <param>
-      <key>_rotation</key>
-      <value>180</value>
-    </param>
-    <param>
-      <key>id</key>
-      <value>blocks_message_debug_0</value>
-    </param>
-  </block>
-  <block>
     <key>op25_repeater_gardner_costas_cc</key>
     <param>
       <key>alpha</key>
@@ -652,6 +594,10 @@
     <param>
       <key>samples_per_symbol</key>
       <value>omega</value>
+    </param>
+    <param>
+      <key>showports</key>
+      <value>False</value>
     </param>
   </block>
   <block>
@@ -998,6 +944,37 @@
     </param>
   </block>
   <block>
+    <key>blocks_message_debug</key>
+    <param>
+      <key>alias</key>
+      <value></value>
+    </param>
+    <param>
+      <key>comment</key>
+      <value></value>
+    </param>
+    <param>
+      <key>affinity</key>
+      <value></value>
+    </param>
+    <param>
+      <key>_enabled</key>
+      <value>0</value>
+    </param>
+    <param>
+      <key>_coordinate</key>
+      <value>(1036, 512)</value>
+    </param>
+    <param>
+      <key>_rotation</key>
+      <value>180</value>
+    </param>
+    <param>
+      <key>id</key>
+      <value>costas_msg_debug</value>
+    </param>
+  </block>
+  <block>
     <key>digital_diff_phasor_cc</key>
     <param>
       <key>alias</key>
@@ -1017,7 +994,7 @@
     </param>
     <param>
       <key>_coordinate</key>
-      <value>(1051, 388)</value>
+      <value>(990, 411)</value>
     </param>
     <param>
       <key>_rotation</key>
@@ -1276,6 +1253,37 @@
     </param>
   </block>
   <block>
+    <key>blocks_message_debug</key>
+    <param>
+      <key>alias</key>
+      <value></value>
+    </param>
+    <param>
+      <key>comment</key>
+      <value></value>
+    </param>
+    <param>
+      <key>affinity</key>
+      <value></value>
+    </param>
+    <param>
+      <key>_enabled</key>
+      <value>0</value>
+    </param>
+    <param>
+      <key>_coordinate</key>
+      <value>(329, 390)</value>
+    </param>
+    <param>
+      <key>_rotation</key>
+      <value>180</value>
+    </param>
+    <param>
+      <key>id</key>
+      <value>qt_freq_msg_debug</value>
+    </param>
+  </block>
+  <block>
     <key>qtgui_freq_sink_x</key>
     <param>
       <key>autoscale</key>
@@ -1319,7 +1327,7 @@
     </param>
     <param>
       <key>_coordinate</key>
-      <value>(315, 276)</value>
+      <value>(308, 284)</value>
     </param>
     <param>
       <key>gui_hint</key>
@@ -3409,6 +3417,12 @@
   </connection>
   <connection>
     <source_block_id>clock</source_block_id>
+    <sink_block_id>costas_msg_debug</sink_block_id>
+    <source_key>freq</source_key>
+    <sink_key>print</sink_key>
+  </connection>
+  <connection>
+    <source_block_id>clock</source_block_id>
     <sink_block_id>diffdec</sink_block_id>
     <source_key>0</source_key>
     <sink_key>0</sink_key>
@@ -3433,15 +3447,15 @@
   </connection>
   <connection>
     <source_block_id>qtgui_freq_sink_x_0</source_block_id>
-    <sink_block_id>blocks_message_debug_0</sink_block_id>
-    <source_key>freq</source_key>
-    <sink_key>print</sink_key>
-  </connection>
-  <connection>
-    <source_block_id>qtgui_freq_sink_x_0</source_block_id>
     <sink_block_id>freq_xlating_fir_filter_xxx_0</sink_block_id>
     <source_key>freq</source_key>
     <sink_key>freq</sink_key>
+  </connection>
+  <connection>
+    <source_block_id>qtgui_freq_sink_x_0</source_block_id>
+    <sink_block_id>qt_freq_msg_debug</sink_block_id>
+    <source_key>freq</source_key>
+    <sink_key>print</sink_key>
   </connection>
   <connection>
     <source_block_id>src</source_block_id>

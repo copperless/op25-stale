@@ -91,9 +91,15 @@ uint8_t gardner_costas_cc_impl::slicer(float sym) {
 	}
 	if(check_frame_sync((nid_accum & P25_FRAME_SYNC_MASK) ^ 0x001050551155LL, 0, 48)) {
 		fprintf(stderr, "tuning error -1200\n");
+		d_freq_offset = 0.000120;
+		message_port_pub(d_out_port,
+		    pmt::cons(d_out_port, pmt::from_double(d_freq_offset)));
 	}
 	if(check_frame_sync((nid_accum & P25_FRAME_SYNC_MASK) ^ 0xFFEFAFAAEEAALL, 0, 48)) {
 		fprintf(stderr, "tuning error +1200\n");
+		d_freq_offset = -0.000120;
+		message_port_pub(d_out_port,
+		    pmt::cons(d_out_port, pmt::from_double(d_freq_offset)));
 	}
 	if(check_frame_sync((nid_accum & P25_FRAME_SYNC_MASK) ^ 0xAA8A0A008800LL, 0, 48)) {
 		fprintf(stderr, "tuning error +/- 2400\n");
@@ -127,11 +133,17 @@ uint8_t gardner_costas_cc_impl::slicer(float sym) {
     d_alpha(alpha), d_beta(beta), 
     d_interp_counter(0),
     d_theta(M_PI / 4.0), d_phase(0), d_freq(0), d_max_freq(max_freq),
-    nid_accum(0)
+    nid_accum(0),
+    d_freq_offset(0.0)
     {
   set_omega(samples_per_symbol);
   set_relative_rate (1.0 / d_omega);
   set_history(d_twice_sps);			// ensure extra input is available
+
+        // setup output message port to correct frequency
+        //we need to know the baseband offset for this to work...
+        d_out_port = pmt::mp("freq");
+        message_port_register_out(d_out_port);
     }
 
     /*

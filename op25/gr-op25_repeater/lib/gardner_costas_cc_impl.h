@@ -100,6 +100,9 @@ protected:
 
   uint64_t			nid_accum;
 
+  pmt::pmt_t d_out_port;
+  double d_freq_offset;
+
   float phase_error_detector_qpsk(gr_complex sample);
   void phase_error_tracking(gr_complex sample);
   };
