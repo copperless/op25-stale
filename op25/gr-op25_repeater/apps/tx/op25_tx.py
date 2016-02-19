@@ -53,6 +53,8 @@ import op25_repeater
 from gnuradio.wxgui import stdgui2, fftsink2
 import wx
 
+import op25_c4fm_mod
+
 ########################################################
 # instantiate one transmit chain for each call
 

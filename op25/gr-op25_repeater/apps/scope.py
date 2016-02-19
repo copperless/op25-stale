@@ -58,6 +58,7 @@ import gnuradio.wxgui.plot as plot
 
 import trunking
 
+import p25_demodulator
 import p25_decoder
 
 sys.path.append('tdma')
@@ -263,14 +264,14 @@ class p25_rx_block (stdgui2.std_top_block):
         self.corr_i_chan = False
 
         if self.baseband_input:
-            self.demod = op25_repeater.p25_demod_fb(input_rate=capture_rate)
+            self.demod = p25_demodulator.p25_demod_fb(input_rate=capture_rate)
             self.set_connection(c4fm=1)
         else:	# complex input
             # local osc
             self.lo_freq = self.options.offset
             if self.options.audio_if or self.options.ifile or self.options.input:
                 self.lo_freq += self.options.calibration
-            self.demod = op25_repeater.p25_demod_cb( input_rate = capture_rate,
+            self.demod = p25_demodulator.p25_demod_cb( input_rate = capture_rate,
                                                        demod_type = 'cqpsk',		### FIXME
                                                        relative_freq = self.lo_freq,
                                                        offset = self.options.offset,
@@ -303,7 +304,7 @@ class p25_rx_block (stdgui2.std_top_block):
             num_ambe = 2
         if self.options.logfile_workers:
             for i in xrange(self.options.logfile_workers):
-                demod = op25_repeater.p25_demod_cb(input_rate=capture_rate,
+                demod = p25_demodulator.p25_demod_cb(input_rate=capture_rate,
                                                      demod_type='cqpsk',	### FIXME
                                                      offset=self.options.offset)
                 decoder = p25_decoder.p25_decoder_sink_b(debug = self.options.verbosity, do_imbe = self.options.vocoder, num_ambe=num_ambe)
