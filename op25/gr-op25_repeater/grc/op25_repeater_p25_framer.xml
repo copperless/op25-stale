@@ -1,14 +1,11 @@
 <?xml version="1.0"?>
 <block>
-    <name>P25 Frame Assembler</name>
-    <key>op25_repeater_p25_frame_assembler</key>
+    <name>P25 Framer (no output)</name>
+    <key>op25_repeater_p25_framer</key>
     <category>op25_repeater</category>
     <import>import op25_repeater</import>
-    <make>op25_repeater.p25_frame_assembler($udp_host,$port,$debug,$audio_output.imbe,$do_output,$do_msgq,$queue,$audio_output,$audio_output.tdma)</make>
+    <make>op25_repeater.p25_frame_assembler($udp_host,$port,$debug,$do_imbe,$do_output,$do_msgq,$queue,$audio_output,$do_phase2_tdma)</make>
 <!--
-static const int MIN_IN = 1;	// mininum number of input streams
-static const int MAX_IN = 1;	// maximum number of input streams
-
 gr::block("p25_frame_assembler",
     gr::io_signature::make (MIN_IN, MAX_IN, sizeof (char)),
     gr::io_signature::make (
@@ -29,29 +26,37 @@ if (d_do_phase2_tdma && !d_do_audio_output)
     <param>
         <name>Do Output</name>
         <key>do_output</key>
-        <value>1</value>
+        <value>0</value>
         <type>int</type>
         <hide>all</hide>
     </param>
     <param>
         <name>Do Audio</name>
         <key>audio_output</key>
+        <value>0</value>
+        <type>int</type>
+        <hide>all</hide>
+    </param>
+    <param>
+        <name>Do IMBE</name>
+        <key>do_imbe</key>
+        <value>0</value>
         <type>enum</type>
-        <hide>none</hide>
         <option>
             <name>No</name>
             <key>0</key>
-            <opt>type:byte</opt>
-            <opt>imbe:0</opt>
-            <opt>tdma:0</opt>
         </option>
         <option>
             <name>Yes</name>
             <key>1</key>
-            <opt>type:short</opt>
-            <opt>imbe:1</opt>
-            <opt>tdma:0</opt>
         </option>
+    </param>
+    <param>
+        <name>Do TDMA</name>
+        <key>do_phase2_tdma</key>
+        <value>0</value>
+        <type>int</type>
+        <hide>all</hide>
     </param>
 
 
@@ -60,7 +65,6 @@ if (d_do_phase2_tdma && !d_do_audio_output)
         <key>udp_host</key>
         <value>127.0.0.1</value>
         <type>string</type>
-        <hide>#if int($port()) &gt; 0 then 'none' else 'part'#</hide>
     </param>
     <param>
         <name>UDP Port</name>
@@ -97,18 +101,11 @@ if (d_do_phase2_tdma && !d_do_audio_output)
         <type>raw</type>
         <hide>#if str($do_msgq()) == '1' then 'none' else 'all'#</hide>
     </param>
-
-
     <sink>
         <name>in</name>
         <type>byte</type>
     </sink>
-    <source>
-        <name>out</name>
-        <type>$audio_output.type</type>
-    </source>
-
     <doc>
-P25 Frame Assembler
+P25 Framer, no output
     </doc>
 </block>

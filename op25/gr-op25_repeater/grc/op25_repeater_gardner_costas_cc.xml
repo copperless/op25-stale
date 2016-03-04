@@ -6,7 +6,7 @@
     <import>import op25_repeater</import>
     <import>import math</import>
     <make>op25_repeater.gardner_costas_cc($samples_per_symbol, $gain_mu, $gain_omega, $alpha, $beta, $max_freq, $min_freq)</make>
-    <!--callback>set_omega($omega)</callback-->
+    <callback>set_omega($samples_per_symbol)</callback>
     <param>
         <name>Samples Per Symbol</name>
         <key>samples_per_symbol</key>
