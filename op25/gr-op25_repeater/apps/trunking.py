@@ -667,17 +667,17 @@ class rx_ctl (object):
                 t = (t << 8) + ord(c)
             updated += self.trunked_systems[nac].decode_tsbk(t)
         elif type == 12:	# trunk: MBT
-            s1 = s[:10]
-            s2 = s[10:]
+            s1 = s[:12]
+            s2 = s[12:]
             header = mbt_data = 0
             for c in s1:
                 header = (header << 8) + ord(c)
             for c in s2:
                 mbt_data = (mbt_data << 8) + ord(c)
-            opcode = (header >> 16) & 0x3f
+            opcode = (header >> 32) & 0x3f
             if self.debug > 10:
                 print "type %d at %f state %d len %d/%d opcode %x [%x/%x]" %(type, time.time(), self.state, len(s1), len(s2), opcode, header,mbt_data)
-            self.trunked_systems[nac].decode_mbt_data(opcode, header << 16, mbt_data << 32)
+            self.trunked_systems[nac].decode_mbt_data(opcode, header, mbt_data)
 
         if nac != self.current_nac:
             return
