@@ -114,7 +114,7 @@ p25_frame_assembler_impl::forecast(int nof_output_items, gr_vector_int &nof_inpu
      nof_samples_reqd = (int)ceil(3.0f * float(nof_output_items));
    //anything above 0.425 causes massive audio under-runs and voice packet stalls
    if (d_do_audio_output)
-       nof_samples_reqd = (int)ceil(0.425f * float(nof_output_items));
+     nof_samples_reqd = (int)ceil(0.425f * float(nof_output_items));
    std::fill(&nof_input_items_reqd[0], &nof_input_items_reqd[nof_inputs], nof_samples_reqd);
 }
 

@@ -22,6 +22,5 @@ install(FILES
     op25_repeater_p25_frame_assembler.xml
     op25_repeater_p25_framer.xml
     op25_repeater_fsk4_slicer_fb.xml
-    op25_repeater_gardner_costas_cc.xml
-    op25_repeater_p25_demodulator.xml DESTINATION share/gnuradio/grc/blocks
+    op25_repeater_gardner_costas_cc.xml DESTINATION share/gnuradio/grc/blocks
 )
