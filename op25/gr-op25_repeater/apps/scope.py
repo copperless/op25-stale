@@ -258,6 +258,7 @@ class p25_rx_block (stdgui2.std_top_block):
         self.fscope_state = False
         self.corr_state = False
         self.fac_state = False
+        self.chan_state = False
         self.fsk4_demod_connected = False
         self.psk_demod_connected = False
         self.fsk4_demod_mode = False
@@ -369,6 +370,7 @@ class p25_rx_block (stdgui2.std_top_block):
 
     def set_connection(self,
                          fscope=False,
+                         chan=False,
                          fft=False,
                          corr=False,
                          fac=False,
@@ -414,6 +416,13 @@ class p25_rx_block (stdgui2.std_top_block):
             else:
                 self.demod.connect_bb('symbol_filter', self.signal_scope)
 
+        if chan != self.chan_state:
+            self.chan_state = chan
+            if chan:
+                self.demod.connect_complex('chan', self.chan_fft)
+            else:
+                self.demod.disconnect_complex()
+
     def notebook_changed(self, evt):
         sel = self.notebook.GetSelection()
         self.lock()
@@ -424,32 +433,35 @@ class p25_rx_block (stdgui2.std_top_block):
             if not self.baseband_input:
                 self.set_connection(fft=1)
                 self.connect_demods()
-        elif sel == 1:   # c4fm
+        elif sel == 1:   # channel fft
+            if not self.baseband_input:
+                self.set_connection(chan=1)
+        elif sel == 2:   # c4fm
             self.set_connection(c4fm=1)
             self.connect_fsk4_demod()
-        elif sel == 2:   # datascope
+        elif sel == 3:   # datascope
             self.set_connection()
             self.connect_fsk4_demod()
             self.connect_data_scope()
-        elif sel == 3:   # constellation (complex)
+        elif sel == 4:   # constellation (complex)
             if not self.baseband_input:
                 self.set_connection()
                 self.connect_psk_demod()
                 self.connect_constellation_scope()
-        elif sel == 4:   # demodulated symbols
+        elif sel == 5:   # demodulated symbols
             self.connect_demods()
             self.set_connection(fscope=1)
-        elif sel == 5:   # traffic pane
+        elif sel == 6:   # traffic pane
             self.connect_demods()
             self.set_connection(fscope=1)
             self.update_traffic(None)
-        elif sel == 6:   # correlation
+        elif sel == 7:   # correlation
             self.disconnect_demods()
             self.current_speed = self.default_speed_idx # reset speed for corr
             self.data_scope.win.radio_box_speed.SetSelection(self.current_speed)
             self.connect_fsk4_demod()
             self.set_connection(corr=1)
-        elif sel == 7:   # fac - fast auto correlation
+        elif sel == 8:   # fac - fast auto correlation
             if not self.baseband_input:
                 self.set_connection(fac=1)
                 self.connect_demods()
@@ -533,6 +545,23 @@ class p25_rx_block (stdgui2.std_top_block):
         #self.spectrum_plotter.enable_point_label(False)
         self.spectrum_plotter.Bind(wx.EVT_LEFT_DOWN, self._on_spectrum_left_click)
         self.notebook.AddPage(self.spectrum.win, "Spectrum")
+        # add channel fft
+        self.chan_fft = fftsink2.fft_sink_c(
+            self.notebook,
+            baseband_freq=0,
+            y_per_div=20,
+            y_divs=10,
+            ref_level=20,
+            ref_scale=1.0,
+            sample_rate=48000,
+            fft_size=2048,
+            fft_rate=15,
+            average=True,
+            avg_alpha=0.25,
+            title="Channel FFT",
+            peak_hold=False,
+        )
+        self.notebook.AddPage(self.chan_fft.win, "Channel")
         # add C4FM scope
         self.signal_scope = scopesink2.scope_sink_f(self.notebook, sample_rate = self.basic_rate, v_scale=5, t_scale=0.001)
         try:

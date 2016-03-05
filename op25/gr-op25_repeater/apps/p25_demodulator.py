@@ -296,3 +296,6 @@ class p25_demod_cb(p25_demod_base):
         elif src == 'mixer':
             self.connect(self.mixer, sink)
             self.complex_sink = [self.mixer, sink]
+        elif src == 'chan':
+            self.connect(self.arb_resampler, sink)
+            self.complex_sink = [self.arb_resampler, sink]
