@@ -40,11 +40,6 @@ try:
 except:
     pass
 
-try:
-    import Numeric
-except:
-    pass
-
 from gnuradio import audio, eng_notation, gr, gru, filter, blocks, fft, analog, digital
 from gnuradio.eng_option import eng_option
 from gnuradio.wxgui import stdgui2, fftsink2, scopesink2, form
@@ -379,7 +374,7 @@ class p25_rx_block (stdgui2.std_top_block):
         if fac != self.fac_state:
             self.fac_state = fac
             if fac:
-                self.demod.connect_complex('mixer', self.fac_scope)
+                self.demod.connect_complex('diffdec', self.fac_scope)
             else:
                 self.demod.disconnect_complex()
         if corr != self.corr_state:
@@ -599,7 +594,7 @@ class p25_rx_block (stdgui2.std_top_block):
         wx.EVT_RADIOBOX(self.correlation_scope.win.radio_box_corr, 11105, self.corr_select)
         self.notebook.AddPage(self.correlation_scope.win, "Correlation")
         # add fac scope
-        self.fac_scope = fac_sink_c(self.notebook, fac_size=32768, sample_rate=self.channel_rate, title="Auto Correlation")
+        self.fac_scope = fac_sink_c(self.notebook, fac_size=2048, sample_rate=9600, average=True, avg_alpha=0.35, title="Auto Correlation")
         self.notebook.AddPage(self.fac_scope.win, "FAC")
         # Setup the decoder and report the TUN/TAP device name
         msgq = gr.msg_queue(2)
@@ -2407,7 +2402,7 @@ class fac_sink_base(object):
 
     def _set_n(self):
         self.one_in_n.set_n(max(1, int(self.sample_rate/self.fac_size/self.fac_rate)))
-        
+
 
 class fac_sink_f(gr.hier_block2, fac_sink_base):
     def __init__(self, parent, baseband_freq=0,
@@ -2423,27 +2418,27 @@ class fac_sink_f(gr.hier_block2, fac_sink_base):
                                average=average, avg_alpha=avg_alpha, title=title,
                                peak_hold=peak_hold)
                                
-        s2p = gr.stream_to_vector(gr.sizeof_float, self.fac_size)
-        self.one_in_n = gr.keep_one_in_n(gr.sizeof_float * self.fac_size,
+        s2p = blocks.stream_to_vector(gr.sizeof_float, self.fac_size)
+        self.one_in_n = blocks.keep_one_in_n(gr.sizeof_float * self.fac_size,
                                          max(1, int(self.sample_rate/self.fac_size/self.fac_rate)))
 
 
 	# windowing removed... 
 
         fac = gr.fft_vfc(self.fac_size, True, ())
-            
-        c2mag = gr.complex_to_mag(self.fac_size)
-        self.avg = gr.single_pole_iir_filter_ff(1.0, self.fac_size)
 
-	#
-	fac_fac   = gr.fft_vfc(self.fac_size, True, ())
-        fac_c2mag = gr.complex_to_mag(fac_size)
+        c2mag = blocks.complex_to_mag(self.fac_size)
+        self.avg = filter.single_pole_iir_filter_ff_make(1.0, self.fac_size)
+
+        #
+        fac_fac   = fft.fft_vfc(self.fac_size, True, ())
+        fac_c2mag = blocks.complex_to_mag_make(fac_size)
 
 
         # FIXME  We need to add 3dB to all bins but the DC bin
-        log = gr.nlog10_ff(20, self.fac_size,
+        log = blocks.nlog10_ff_make(20, self.fac_size,
                            -20*math.log10(self.fac_size) )
-        sink = gr.message_sink(gr.sizeof_float * self.fac_size, self.msgq, True)
+        sink = blocks.message_sink(gr.sizeof_float * self.fac_size, self.msgq, True)
 
         self.connect(self, s2p, self.one_in_n, fac, c2mag,  fac_fac, fac_c2mag, self.avg, log, sink)
         # gr.hier_block.__init__(self, fg, s2p, sink)
@@ -2458,7 +2453,7 @@ class fac_sink_f(gr.hier_block2, fac_sink_base):
 
 class fac_sink_c(gr.hier_block2, fac_sink_base):
     def __init__(self, parent, baseband_freq=0,
-                 y_per_div=10, ref_level=90, sample_rate=1, fac_size=512,
+                 y_per_div=10, ref_level=30, sample_rate=1, fac_size=512,
                  fac_rate=default_fac_rate, 
                  average=False, avg_alpha=None,
                  title='', size=default_facsink_size, peak_hold=False):
@@ -2472,7 +2467,6 @@ class fac_sink_c(gr.hier_block2, fac_sink_base):
         gr.hier_block2.__init__(self, "fac_sink_c", 
             gr.io_signature(1, 1, gr.sizeof_gr_complex),
             gr.io_signature(0, 0, 0))
-
         s2p = blocks.stream_to_vector(gr.sizeof_gr_complex, self.fac_size)
         #s2p = repeater.s2v(gr.sizeof_gr_complex, self.fac_size)
         self.one_in_n = blocks.keep_one_in_n(gr.sizeof_gr_complex * self.fac_size,
@@ -2485,15 +2479,15 @@ class fac_sink_c(gr.hier_block2, fac_sink_base):
         c2mag = blocks.complex_to_mag(fac_size)
 
         # Things go off into the weeds if we try for an inverse FFT so a forward FFT will have to do...
-	fac_fac   = fft.fft_vfc(self.fac_size, True, ())
-        fac_c2mag = blocks.complex_to_mag(fac_size)
+        fac_fac   = fft.fft_vfc(self.fac_size, True, ())
+        fac_c2mag = blocks.complex_to_mag_make(fac_size)
 
 
-        self.avg = filter.single_pole_iir_filter_ff(1.0, fac_size)
+        self.avg = filter.single_pole_iir_filter_ff_make(1.0, fac_size)
 
-        log = blocks.nlog10_ff(20, self.fac_size, 
+        log = blocks.nlog10_ff_make(20, self.fac_size,
                            -20*math.log10(self.fac_size)  ) #  - 20*math.log10(norm) ) # - self.avg[0] )
-        sink = blocks.message_sink(gr.sizeof_float * fac_size, self.msgq, True)
+        sink = blocks.message_sink_make(gr.sizeof_float * fac_size, self.msgq, True)
 
         self.connect(self, s2p, self.one_in_n, fac, c2mag,  fac_fac, fac_c2mag, self.avg)
 	self.connect(self.avg, log, sink)
@@ -2544,7 +2538,7 @@ class fac_input_watcher (threading.Thread):
                 start = itemsize * (nitems - 1)
                 s = s[start:start+itemsize]
 
-            complex_data = Numeric.fromstring (s, Numeric.Float32)
+            complex_data = numpy.fromstring (s, numpy.float32)
             de = fac_DataEvent (complex_data)
             wx.PostEvent (self.event_receiver, de)
             del de
@@ -2587,16 +2581,16 @@ class fac_window (plot.PlotCanvas):
             if self.peak_vals is None:
                 self.peak_vals = dB
             else:
-                self.peak_vals = Numeric.maximum(dB, self.peak_vals)
+                self.peak_vals = numpy.maximum(dB, self.peak_vals)
                 dB = self.peak_vals
 
         x = max(abs(self.facsink.sample_rate), abs(self.facsink.baseband_freq))
         sf = 1000.0
         units = "ms"
 
-        x_vals = ((Numeric.arrayrange (L/2)
+        x_vals = ((numpy.arange (L/2)
                        * ( (sf / self.facsink.sample_rate  ) )) )
-        points = Numeric.zeros((len(x_vals), 2), Numeric.Float64)
+        points = numpy.zeros((len(x_vals), 2), numpy.float64)
         points[:,0] = x_vals
         points[:,1] = dB[0:L/2]
 
