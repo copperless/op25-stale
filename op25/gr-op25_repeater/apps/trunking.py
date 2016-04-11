@@ -44,6 +44,22 @@ def get_frequency(f):	# return frequency in Hz
     else:     # assume in MHz due to '.'
         return int(float(f) * 1000000)
 
+def get_srv_options(options): # Service Options: TIA-102.AABC-C page 35
+    PRI = options & 0x7 #Priority level, 7 = Highest, 1 = Lowest
+    E = (options >> 7) & 0x1 #Emergency
+    P = (options >> 6) & 0x1 #Protected
+    D = (options >> 5) & 0x1 #Duplex: 0 = Half duplex, 1 = Full duplex
+    M = (options >> 4) & 0x1 #  Mode: 0 = Circuit mode, 1 = Packet mode
+    return (PRI,E,P,D,M)
+
+def get_data_srv_options(options): #Data Service Options : TIA-102.AABC-C page 30
+    NSAPI = options & 0xf #SNDCP Network Service Access Point ID
+    E = (options >> 7) & 0x1 #Emergency
+    P = (options >> 6) & 0x1 #Protected
+    D = (options >> 5) & 0x1 #Duplex: 0 = Half duplex, 1 = Full duplex
+    M = (options >> 4) & 0x1 #  Mode: 0 = Circuit mode, 1 = Packet mode
+    return (NSAPI,E,P,D,M)
+
 class trunked_system (object):
     def __init__(self, debug=0, config=None):
         self.debug = debug
@@ -76,6 +92,8 @@ class trunked_system (object):
         self.center_frequency = 0
         self.last_tsbk = 0
         self.cc_timeouts = 0
+
+        self.secure_list = [] #track encrypted talkgroups
 
         self.talkgroups = {}
         if config:
@@ -207,6 +225,8 @@ class trunked_system (object):
         if self.debug > 10:
             print "decode_mbt_data: %x %x" %(opcode, mbt_data)
         if opcode == 0x0:  # grp voice channel grant
+            opts  = (header >> 24) & 0xff
+            (PRI,E,P,D,M) = get_srv_options(opts)
             ch1  = (mbt_data >> 64) & 0xffff
             ch2  = (mbt_data >> 48) & 0xffff
             ga   = (mbt_data >> 32) & 0xffff
@@ -278,13 +298,16 @@ class trunked_system (object):
                     print "MOT_GRG_ADD_CMD(0x00): sg:%d ga1:%d ga2:%d ga3:%d" % (sg, ga1, ga2, ga3)
             else:
                 opts  = (tsbk >> 72) & 0xff
+                (PRI,E,P,D,M) = get_srv_options(opts)
                 ch   = (tsbk >> 56) & 0xffff
                 ga   = (tsbk >> 40) & 0xffff
                 sa   = (tsbk >> 16) & 0xffffff
                 f = self.channel_id_to_frequency(ch)
                 self.update_voice_frequency(f, tgid=ga, tdma_slot=self.get_tdma_slot(ch))
-                if f:
+                if f and P == 0:
                     updated += 1
+                if P == 1 and ga not in self.secure_list:
+                    self.secure_list.append(ga)
                 if self.debug > 10:
                     print "tsbk00 grant freq %s ga %d sa %d" % (self.channel_id_to_string(ch), ga, sa)
         elif opcode == 0x01:   # reserved
@@ -315,13 +338,14 @@ class trunked_system (object):
                 ga2  = (tsbk >> 16) & 0xffff
                 f1 = self.channel_id_to_frequency(ch1)
                 f2 = self.channel_id_to_frequency(ch2)
-                self.update_voice_frequency(f1, tgid=ga1, tdma_slot=self.get_tdma_slot(ch1))
-                if f1 != f2:
-                    self.update_voice_frequency(f2, tgid=ga2, tdma_slot=self.get_tdma_slot(ch2))
-                if f1:
-                    updated += 1
-                if f2:
-                    updated += 1
+                if ga1 not in self.secure_list and ga2 not in self.secure_list: #skip late entry for enc enabled tgs
+                    self.update_voice_frequency(f1, tgid=ga1, tdma_slot=self.get_tdma_slot(ch1))
+                    if f1 != f2:
+                        self.update_voice_frequency(f2, tgid=ga2, tdma_slot=self.get_tdma_slot(ch2))
+                    if f1:
+                        updated += 1
+                    if f2:
+                        updated += 1
                 if self.debug > 10:
                     print "tsbk02 grant update: chan %s %d %s %d" %(self.channel_id_to_string(ch1), ga1, self.channel_id_to_string(ch2), ga2)
         elif opcode == 0x03:   # group voice chan grant update exp : TIA.102-AABC-B-2005 page 56
@@ -342,6 +366,22 @@ class trunked_system (object):
                     updated += 1
                 if self.debug > 10:
                     print "MOT_GRG_CN_GRANT_UPDT(0x03): freq %s sg1:%d freq %s sg2:%d" % (self.channel_id_to_string(ch1), sg1, self.channel_id_to_string(ch2), sg2)
+            else:
+                opts = (tsbk >> 72) & 0xff # Service Options: TIA-102.AABC-C page 35
+                (PRI,E,P,D,M) = get_srv_options(opts)
+
+                ch1  = (tsbk >> 48) & 0xffff
+                ch2 = (tsbk >> 32) & 0xffff
+                ga  = (tsbk >> 16) & 0xffff
+                f1 = self.channel_id_to_frequency(ch1)
+                if f1 == None: f1 = 0
+                self.update_voice_frequency(f1, tgid=ga, tdma_slot=self.get_tdma_slot(ch1))
+                if f1 and P == 0:
+                    updated += 1
+                if P == 1 and ga not in self.secure_list:
+                    self.secure_list.append(ga)
+                if self.debug > 10:
+                    print "tsbk03 grant update exp: ch %d freq %f ga %d" % (self.channel_id_to_string(ch1), f1 / 1000000.0, ga)
         elif opcode == 0x16:   # sndcp data ch
             ch1  = (tsbk >> 48) & 0xffff
             ch2  = (tsbk >> 32) & 0xffff
