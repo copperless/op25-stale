@@ -64,6 +64,11 @@ speeds = [4800, 6000]
 
 os.environ['IMBE'] = 'soft'
 
+p = gr.prefs()
+if p.has_section('audio_alsa'):
+    p.set_double('audio_alsa', 'period_time', 0.025)
+    p.set_long('audio_alsa', 'nperiods', 16)
+
 WIRESHARK_PORT = 23456
 
 msg_wxDATA_EVENT = wx.NewEventType()
@@ -606,6 +611,9 @@ class p25_rx_block (stdgui2.std_top_block):
 
         self.myform = myform = form.form()
         hbox = wx.BoxSizer(wx.HORIZONTAL)
+
+        #font = wx.Font(8, wx.DEFAULT, wx.NORMAL, wx.BOLD)
+        #self.panel.SetFont(font)
 
         vbox_form = wx.BoxSizer(wx.VERTICAL)
         myform['system'] = form.static_text_field(
