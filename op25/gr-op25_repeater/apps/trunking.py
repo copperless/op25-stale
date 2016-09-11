@@ -222,8 +222,7 @@ class trunked_system (object):
     def decode_mbt_data(self, opcode, header, mbt_data):
         self.cc_timeouts = 0
         self.last_tsbk = time.time()
-        if self.debug > 10:
-            print "decode_mbt_data: %x %x" %(opcode, mbt_data)
+
         if opcode == 0x0:  # grp voice channel grant
             opts  = (header >> 24) & 0xff
             (PRI,E,P,D,M) = get_srv_options(opts)
@@ -273,23 +272,53 @@ class trunked_system (object):
                 self.rfss_txchan = f2
             if self.debug > 10:
                 print "mbt3a rfss stat sys %x rfid %x stid %x ch1 %s ch2 %s" %(syid, rfid, stid, self.channel_id_to_string(ch1), self.channel_id_to_string(ch2))
-        #else:
-        #    print "mbt other %x" % opcode
+        else:
+            if self.debug > 10:
+                print "decode_mbt_data[%02X]: %024X %024X" %(opcode, header, mbt_data)
 
     def decode_tsbk(self, tsbk):
         self.cc_timeouts = 0
         self.stats['tsbks'] += 1
         updated = 0
-        #if crc16(tsbk, 12) != 0:
-        #    self.stats['crc'] += 1
-        #    return	# crc check failed
-        #tsbk = tsbk << 16	# for missing crc
+
+        lbf = (tsbk >> 95) & 0x1		#last block flag
+        pf = (tsbk >> 94) & 0x1			#protected flag
         opcode = (tsbk >> 88) & 0x3f
-        if self.debug > 10:
-            print "TSBK: 0x%02x 0x%024x" % (opcode, tsbk)
+        mfrid  = (tsbk >> 80) & 0xff
+
         if opcode == 0x00:   # group voice chan grant
-            mfrid  = (tsbk >> 80) & 0xff
-            if mfrid == 0x90:	# MOT_GRG_ADD_CMD
+            if mfrid == 0x00:
+                opts  = (tsbk >> 72) & 0xff # Service Options: TIA-102.AABC-C page 35
+                #PRI = opts & 0x7 #Priority level, 7 = Highest, 1 = Lowest
+                #E = (opts >> 7) & 0x1 #Emergency
+                #P = (opts >> 6) & 0x1 #Protected
+                #D = (opts >> 5) & 0x1 #Duplex, 0 = Half duplex, 1 = Full duplex
+                #M = (opts >> 4) & 0x1 #Mode, 0 = Circuit mode, 1 = Packet mode
+                (PRI,E,P,D,M) = get_srv_options(opts)
+
+                #GRP_V_CH_GRANT[00]: ch1b freq 851.175000 ga 4 (PPD NCIC) sa 1112
+                #GRP_V_CH_GRANT[00]: ch99 freq 851.962500 ga 1082 (FVFD Ops 2) sa 7560940
+                #GRP_V_CH_GRANT[00]: ch107 freq 852.650000 ga 5 (PPD Dispatch 2) sa 636
+
+                ch = (tsbk >> 56) & 0xffff
+                chan_id = ch & 0xfff
+                ga = (tsbk >> 40) & 0xffff
+                sa = (tsbk >> 16) & 0xffffff
+                #f1 = self.channel_id_to_frequency(ch)
+                #if f1 == None: f1 = 0
+                f = self.channel_id_to_frequency(ch)
+                #self.update_voice_frequency(f, lcn=chan_id, tgid=ga, tdma_slot=self.get_tdma_slot(ch), srv_opts=opts)
+                #self.update_voice_frequency(f, lcn=chan_id, tgid=ga, sa=sa, tdma_slot=self.get_tdma_slot(ch), srv_opts=opts)
+                self.update_voice_frequency(f, tgid=ga, tdma_slot=self.get_tdma_slot(ch))
+                if f and P == 0: #don't update unless unsecured..
+                    updated += 1
+                if P == 1 and ga not in self.secure_list:
+                    self.secure_list.append(ga)
+                    #print "%s (%s): ch %d freq %f ga %d (%s) sa %d opts 0x%02X" % (blue("GRP_V_CH_GRANT[00]"), red("SECURE"), chan_id, f / 1000000.0, ga, self.get_tag(ga), sa, opts)
+
+                if self.debug > 10:
+                    print "GRP_V_CH_GRANT[00]: ch %d freq %f ga %d (%s) sa %d" % (chan_id, f / 1000000.0, ga, self.get_tag(ga), sa)
+            elif mfrid == 0x90:	# MOT_GRG_ADD_CMD
                 sg  = (tsbk >> 64) & 0xffff
                 ga1   = (tsbk >> 48) & 0xffff
                 ga2   = (tsbk >> 32) & 0xffff
@@ -297,21 +326,9 @@ class trunked_system (object):
                 if self.debug > 10:
                     print "MOT_GRG_ADD_CMD(0x00): sg:%d ga1:%d ga2:%d ga3:%d" % (sg, ga1, ga2, ga3)
             else:
-                opts  = (tsbk >> 72) & 0xff
-                (PRI,E,P,D,M) = get_srv_options(opts)
-                ch   = (tsbk >> 56) & 0xffff
-                ga   = (tsbk >> 40) & 0xffff
-                sa   = (tsbk >> 16) & 0xffffff
-                f = self.channel_id_to_frequency(ch)
-                self.update_voice_frequency(f, tgid=ga, tdma_slot=self.get_tdma_slot(ch))
-                if f and P == 0:
-                    updated += 1
-                if P == 1 and ga not in self.secure_list:
-                    self.secure_list.append(ga)
                 if self.debug > 10:
-                    print "tsbk00 grant freq %s ga %d sa %d" % (self.channel_id_to_string(ch), ga, sa)
+                    print "TSBK: %024X (UNKNOWN MFG 0x%02x OPCODE 0x%02x)" % (tsbk, mfrid, opcode)
         elif opcode == 0x01:   # reserved
-            mfrid  = (tsbk >> 80) & 0xff
             if mfrid == 0x90: #MOT_GRG_DEL_CMD
                 sg  = (tsbk >> 64) & 0xffff
                 ga1   = (tsbk >> 48) & 0xffff
@@ -319,22 +336,16 @@ class trunked_system (object):
                 ga3   = (tsbk >> 16) & 0xffff
                 if self.debug > 10:
                     print "MOT_GRG_DEL_CMD(0x01): sg:%d ga1:%d ga2:%d ga3:%d" % (sg, ga1, ga2, ga3)
-        elif opcode == 0x02:   # group voice chan grant update
-            mfrid  = (tsbk >> 80) & 0xff
-            if mfrid == 0x90:
-                ch  = (tsbk >> 56) & 0xffff
-                sg  = (tsbk >> 40) & 0xffff
-                sa  = (tsbk >> 16) & 0xffffff
-                f = self.channel_id_to_frequency(ch)
-                self.update_voice_frequency(f, tgid=sg, tdma_slot=self.get_tdma_slot(ch))
-                if f:
-                    updated += 1
-                if self.debug > 10:
-                    print "MOT_GRG_CN_GRANT(0x02): freq %s sg:%d sa:%d" % (self.channel_id_to_string(ch), sg, sa)
             else:
+                if self.debug > 10:
+                    print "TSBK: %024X (UNKNOWN MFG 0x%02x OPCODE 0x%02x)" % (tsbk, mfrid, opcode)
+        elif opcode == 0x02:   # group voice chan grant update
+            if mfrid == 0x00:
                 ch1  = (tsbk >> 64) & 0xffff
+                ch1_id = ch1 & 0xfff
                 ga1  = (tsbk >> 48) & 0xffff
                 ch2  = (tsbk >> 32) & 0xffff
+                ch2_id = ch2 & 0xfff
                 ga2  = (tsbk >> 16) & 0xffff
                 f1 = self.channel_id_to_frequency(ch1)
                 f2 = self.channel_id_to_frequency(ch2)
@@ -347,10 +358,40 @@ class trunked_system (object):
                     if f2:
                         updated += 1
                 if self.debug > 10:
-                    print "tsbk02 grant update: chan %s %d %s %d" %(self.channel_id_to_string(ch1), ga1, self.channel_id_to_string(ch2), ga2)
+                    print "GRP_V_CH_GRANT_UPDT[02]: chan1 %d %s grp %d, chan2 %d %s grp %d" %(ch1_id, self.channel_id_to_string(ch1), ga1, ch2_id, self.channel_id_to_string(ch2), ga2)
+            elif mfrid == 0x90:
+                ch  = (tsbk >> 56) & 0xffff
+                sg  = (tsbk >> 40) & 0xffff
+                sa  = (tsbk >> 16) & 0xffffff
+                f = self.channel_id_to_frequency(ch)
+                self.update_voice_frequency(f, tgid=sg, tdma_slot=self.get_tdma_slot(ch))
+                if f:
+                    updated += 1
+                if self.debug > 10:
+                    print "MOT_GRG_CN_GRANT(0x02): freq %s sg:%d sa:%d" % (self.channel_id_to_string(ch), sg, sa)
+            else:
+                if self.debug > 10:
+                    print "TSBK: %024X (UNKNOWN MFG 0x%02x OPCODE 0x%02x)" % (tsbk, mfrid, opcode)
         elif opcode == 0x03:   # group voice chan grant update exp : TIA.102-AABC-B-2005 page 56
-            mfrid  = (tsbk >> 80) & 0xff
-            if mfrid == 0x90: #MOT_GRG_CN_GRANT_UPDT
+            if mfrid == 0x00:
+                opts = (tsbk >> 72) & 0xff # Service Options: TIA-102.AABC-C page 35
+                (PRI,E,P,D,M) = get_srv_options(opts)
+
+                ch1 = (tsbk >> 48) & 0xffff
+                ch1_id = ch1 & 0xfff
+                ch2 = (tsbk >> 32) & 0xffff
+                ga  = (tsbk >> 16) & 0xffff
+                f1 = self.channel_id_to_frequency(ch1)
+                if f1 == None: f1 = 0
+                self.update_voice_frequency(f1, tgid=ga, tdma_slot=self.get_tdma_slot(ch1))
+                if f1 and P == 0:
+                    updated += 1
+                if P == 1 and ga not in self.secure_list:
+                    self.secure_list.append(ga)
+                if self.debug > 10:
+                    #print "tsbk03 grant update exp: ch %d freq %f ga %d" % (self.channel_id_to_string(ch1), f1 / 1000000.0, ga)
+                    print "GRP_V_CH_GRANT_UPDT_EXP[03]: ch1 %d freq %f ga %d (%s) ch2 0x%04X opts 0x%02x" % (ch1, f1 / 1000000.0, ga, self.get_tag(ga), ch2, opts)
+            elif mfrid == 0x90: #MOT_GRG_CN_GRANT_UPDT
                 ch1   = (tsbk >> 64) & 0xffff
                 sg1  = (tsbk >> 48) & 0xffff
                 ch2   = (tsbk >> 32) & 0xffff
@@ -367,46 +408,738 @@ class trunked_system (object):
                 if self.debug > 10:
                     print "MOT_GRG_CN_GRANT_UPDT(0x03): freq %s sg1:%d freq %s sg2:%d" % (self.channel_id_to_string(ch1), sg1, self.channel_id_to_string(ch2), sg2)
             else:
+                if self.debug > 10:
+                    print "TSBK: %024X (UNKNOWN MFG 0x%02x OPCODE 0x%02x)" % (tsbk, mfrid, opcode)
+
+        elif opcode == 0x04:   # unit to unit voice chan grant : TIA-102.AABC-C page 63
+            if mfrid == 0x00: # UU_V_CH_GRANT
+                ch = (tsbk >> 64) & 0xffff
+                iden = (ch >> 12) & 0xf
+                ta  = (tsbk >> 40) & 0xffffff
+                sa  = (tsbk >> 16) & 0xffffff
+                f = self.channel_id_to_frequency(ch)
+                if f == None: f = 0
+                if self.debug > 10:
+                    print "UU_V_CH_GRANT[04]: Chan:%d-%03d freq %f Target Address:%d Source Address:%d" % (iden, (ch & 0xfff), f / 1000000.0, ta, sa)
+            elif mfrid == 0x90: #MOT_EXT_FNCT_CMD
+                #TODO needs work
+                class_type = (tsbk >> 72) & 0xff
+                #Class Types
+                #    Control Command - Unit = 0
+                #    Control Command - Group = 1
+                #    Dynamic Command - Unit = 2
+                #    Dynamic Command - Group = 3
+                #    Tone Signaling - Unit = 4
+                #    Tone Signaling - Group = 5
+                operand_type = (tsbk >> 64) & 0xff
+                #Operand Types
+                #    Radio Check = 0
+                #    Radio Check ACK = 0x80
+                #    Radio Detach = 0x7D
+                #    Radio Detach ACK = 0xFD
+                #    Radio Inhibit = 0x7F
+                #    Radio Inhibit ACK = 0xFF
+                #    Radio Uninhibit = 0x7E
+                #    Radio Uninhibit ACK = 0xFE
+                #ext  = (tsbk >> 40) & 0xffffff
+                #group address or source target, not both
+                ga = (tsbk >> 48) & 0xffff	#group address
+                st = (tsbk >> 40) & 0xffffff	#source target
+                ta = (tsbk >> 16) & 0xffffff	#target address
+                #print "MOT_EXT_FNCT_CMD[04]: %024X" % (tsbk)
+                if self.debug > 10:
+                    print "MOT_EXT_FNCT_CMD[04]: class 0x%02X operand 0x%02X ga %d st %d ta %d" % (class_type, operand_type, ga, st, ta)
+            else:
+                if self.debug > 10:
+                    print "TSBK: %024X (UNKNOWN MFG 0x%02x OPCODE 0x%02x)" % (tsbk, mfrid, opcode)
+        elif opcode == 0x05:   # unit to unit answer request : TIA-102.AABC-C page 61
+            if mfrid == 0x00: # UU_ANS_REQ
                 opts = (tsbk >> 72) & 0xff # Service Options: TIA-102.AABC-C page 35
                 (PRI,E,P,D,M) = get_srv_options(opts)
 
-                ch1  = (tsbk >> 48) & 0xffff
+                ta  = (tsbk >> 40) & 0xffffff
+                src  = (tsbk >> 16) & 0xffffff
+                #print "UU_ANS_REQ[05]: Service Options:0x%02X Target Address:%d Source ID:%d" % (opts, ta, src)
+                if self.debug > 10:
+                    print "UU_ANS_REQ[05]: opts 0x%02X ta %d src %d" % (opts, ta, src)
+            elif mfrid == 0x90: #MOT_SYS_BCST
+                #Methods and apparatus for communicating subscriber control packets in a trunked radio system (FRHOT)
+                #http://www.google.com/patents/US8675614
+                # Holdoff timers (RRHOT and FRHOT) are used to prevent a large volume of MSUs
+                # from trying to register with the recovered site simultaneously.
+                #http://files.p25.ca/astro25/PDFs/6871024P66-A_GCP_8000_Site_Controller.pdf
+
+                frhot_g = (tsbk >> 72) & 0x3f #Failure Random Hold-Off Timer - group
+                frhot_iu = (tsbk >> 64) & 0x3f #Failure Random Hold-Off Timer - user
+                rrhot = (tsbk >> 56) & 0x3f #Recovery Random Hold-Off Time (RRHOT)
+
+                byte1 = (tsbk >> 48) & 0xff #unknown byte
+                byte2 = (tsbk >> 40) & 0xff #unknown byte
+                byte3 = (tsbk >> 32) & 0xff #unknown byte
+
+                if self.debug > 10:
+                    print "MOT_SYS_BCST[05]: FRHOT G 0x%02x(%d), FRHOT IU 0x%02x(%d), RRHOT 0x%02x(%d), 0x%02x(%d), 0x%02x(%d), 0x%02x(%d)" % ( \
+                        frhot_g, frhot_g, frhot_iu, frhot_iu, rrhot, rrhot, byte1, byte1, byte2, byte2, byte3, byte3)
+            else:
+                if self.debug > 10:
+                    print "TSBK: %024X (UNKNOWN MFG 0x%02x OPCODE 0x%02x)" % (tsbk, mfrid, opcode)
+        elif opcode == 0x06:   # unit to unit voice chan grant update : TIA-102.AABC-C page 69
+            if mfrid == 0x00: #UU_V_CH_GRANT_UPDT
+                ch = ((tsbk >> 64) & 0xffff)
+                ta = ((tsbk >> 40) & 0xffffff)
+                sa = ((tsbk >> 16) & 0xffffff)
+                f = self.channel_id_to_frequency(ch)
+                if f == None: f = 0
+                if self.debug > 10:
+                    print "UU_V_CH_GRANT_UPDT[06]: ch %x freq %f ta %d sa %d" % (ch, f / 1000000.0, ta, sa)
+            elif mfrid == 0x90: #MOT_QUE_RSP
+                aiv = (tsbk >> 79) & 0x1 #additional information valid
+                serv_type = (tsbk >> 72) & 0x3f
+                reason = (tsbk >> 64) & 0xff
+                additional = (tsbk >> 40) & 0xffffff
+                ta = (tsbk >> 16) & 0xffffff
+                if self.debug > 10:
+                    print "MOT_QUE_RSP[06]: aiv:%d type:%02X reason:%02X additional:%06X ta %d" % (aiv, serv_type, reason, additional, ta)
+            else:
+                if self.debug > 10:
+                    print "TSBK: %024X (UNKNOWN MFG 0x%02x OPCODE 0x%02x)" % (tsbk, mfrid, opcode)
+        elif opcode == 0x07:   # reserved
+            if mfrid == 0x90: #MOT_DENY_RSP
+                #rcb = 0 #reason code bit
+                other1 = (tsbk >> 72) & 0xff #TODO
+                other2 = (tsbk >> 64) & 0xff #maybe?
+                additional = (tsbk >> 40) & 0xffffff
+                ta = (tsbk >> 16) & 0xffffff
+                if self.debug > 10:
+                    print "MOT_DENY_RSP[07]: other1 0x%02x other2 0x%02x additional:%06X ta %d" % (other1, other2, additional, ta)
+            else:
+                if self.debug > 10:
+                    print "TSBK: %024X (UNKNOWN MFG 0x%02x OPCODE 0x%02x)" % (tsbk, mfrid, opcode)
+        elif opcode == 0x08:   # tele int ch grant : TIA-102.AABC-C page 66
+            if mfrid == 0x00: # TELE_INT_CH_GRANT
+                opts = (tsbk >> 72) & 0xff # Service Options: TIA-102.AABC-C page 35
+                (PRI,E,P,D,M) = get_srv_options(opts)
+
+                chan = (tsbk >> 56) & 0xffff
+                call_timer = (tsbk >> 40) & 0xffff
+                sta = (tsbk >> 16) & 0xffffff #source or target
+                if self.debug > 10:
+                    print "TELE_INT_CH_GRANT(0x08): options 0x%02X chan %d call timer %d sta %d" % (opts, chan, call_timer, sta)
+            elif mfrid == 0x90:  #MOT_ACK_RSP_FNE
+                serv_type = (tsbk >> 72) & 0x3f
+                sa = (tsbk >> 40) & 0xffffff
+                ta = (tsbk >> 16) & 0xffffff
+                if self.debug > 10:
+                    print "MOT_ACK_RSP_FNE(0x08): service type:0x%02X ga:%d ta:%d" % (serv_type, ga, ta)
+            else:
+                if self.debug > 10:
+                    print "TSBK: %024X (UNKNOWN MFG 0x%02x OPCODE 0x%02x)" % (tsbk, mfrid, opcode)
+        elif opcode == 0x09:   # tele int ch grant update : TIA-102.AABC-C page 72
+            if mfrid == 0x00: # TELE_INT_CH_GRANT_UPDT
+                opts = (tsbk >> 72) & 0xff # Service Options: TIA-102.AABC-C page 35
+                (PRI,E,P,D,M) = get_srv_options(opts)
+
+                chan = ((tsbk >> 56) & 0xffff)
+                call_timer = ((tsbk >> 40) & 0xffff)
+                sta = ((tsbk >> 16) & 0xffffff) #source or target
+                if self.debug > 10:
+                    print "TELE_INT_CH_GRANT_UPDT(0x09): options 0x%02X chan %d call timer %d sta %d" % (opts, chan, call_timer, sta)
+            elif mfrid == 0x90:   # Motorola Scan Marker (MOT_SCN_MRK)
+                msc = (tsbk >> 70) & 0x3ff #MICROSLOT COUNT (7.5 ms)
+                if self.debug > 10:
+                    print "MOT_SCN_MRK[09]: 0x%02x 0x%024x (MICROSLOT COUNT:%d)" % (opcode, tsbk, msc)
+            else:
+                if self.debug > 10:
+                    print "TSBK: %024X (UNKNOWN MFG 0x%02x OPCODE 0x%02x)" % (tsbk, mfrid, opcode)
+        elif opcode == 0x0a:   # tele int ans req : TIA-102.AABC-C page 68
+            if mfrid == 0x00: #TELE_INT_ANS_REQ
+                d01 = ((tsbk >> 76) & 0xf)
+                d02 = ((tsbk >> 72) & 0xf)
+                d03 = ((tsbk >> 68) & 0xf)
+                d04 = ((tsbk >> 64) & 0xf)
+                d05 = ((tsbk >> 60) & 0xf)
+                d06 = ((tsbk >> 56) & 0xf)
+                d07 = ((tsbk >> 52) & 0xf)
+                d08 = ((tsbk >> 48) & 0xf)
+                d09 = ((tsbk >> 44) & 0xf)
+                d10 = ((tsbk >> 40) & 0xf)
+                ta = ((tsbk >> 16) & 0xffffff)
+                if self.debug > 10:
+                    print "TELE_INT_ANS_REQ(0x0A): target:%d %d%d%d%d%d%d%d%d%d%d" % (ta, d01, d02, d03, d04, d05, d06, d07, d08, d09, d10)
+            elif mfrid == 0x90:  #MOT_EMR_ALRM
+                ga = ((tsbk >> 40) & 0xffff)
+                sa = ((tsbk >> 16) & 0xffffff)
+                if self.debug > 10:
+                    print "MOT_EMR_ALRM(0x0A): ga:%d sa:%d" % (ga, sa)
+            else:
+                if self.debug > 10:
+                    print "TSBK: %024X (UNKNOWN MFG 0x%02x OPCODE 0x%02x)" % (tsbk, mfrid, opcode)
+        elif opcode == 0x0b:   # reserved
+            if mfrid == 0x90:  #MOT_BSI_GRANT
+                #print "MOT_BSI_GRANT: op:0x%02x mfrid:0x%02x 0x%024x" % (opcode, mfrid, tsbk)
+                #TSBK: 0x0b 0x0b 90 b268de28a1c0 0017 0000
+                #TSBK: 0x0b 0x8b 90 b268de28a1c0 0017 0000
+                #BSI: 0x2c 0x26 0x23 0x1e 0x0a 0x0a 0x07 0x00
+                #BSI: 0x2c 0x26 0x23 0x1e 0x0a 0x0a 0x07 0x00
+
+                #bits = [74, 68, 62, 56, 50, 44, 38, 32]
+                #tsbk = 0x0b90b268de28a1c000170000
+                #bsi = ''
+                #for bit in bits:
+                #    print "((tsbk >> %d) & 0x3f) + 0x2b" % (bit)
+                #    ch1 = ((tsbk >> bit) & 0x3f) + 0x2b
+                #    bsi += '%s' % (chr(ch1))
+                #print "BSI: %s" % (bsi)
+
+                char1 = ((tsbk >> 74) & 0x3f) + 0x2b
+                char2 = ((tsbk >> 68) & 0x3f) + 0x2b
+                char3 = ((tsbk >> 62) & 0x3f) + 0x2b
+                char4 = ((tsbk >> 56) & 0x3f) + 0x2b
+                char5 = ((tsbk >> 50) & 0x3f) + 0x2b
+                char6 = ((tsbk >> 44) & 0x3f) + 0x2b
+                char7 = ((tsbk >> 38) & 0x3f) + 0x2b
+                char8 = ((tsbk >> 32) & 0x3f) + 0x2b
+
+                ch = (tsbk >> 16) & 0xffff
+                bsi = '%s%s%s%s%s%s%s%s' % (chr(char1), chr(char2), chr(char3), chr(char4), chr(char5), chr(char6), chr(char7), chr(char8))
+                f1 = self.channel_id_to_frequency(ch)
+                if self.debug > 10:
+                    print "BSI: Call sign:'%s' ch:%d freq %f (%s)" % (bsi, ch, f1 / 1000000.0, ts)
+            else:
+                if self.debug > 10:
+                    print "TSBK: %024X (UNKNOWN MFG 0x%02x OPCODE 0x%02x)" % (tsbk, mfrid, opcode)
+        elif opcode == 0x0c:   # reserved
+            if mfrid == 0x90: # MOT_ADPT_PWR_CNTRL
+                #TODO: moar
+                rf_level = ((tsbk >> 44) & 0xf)
+                ber = ((tsbk >> 40) & 0xf)
+                ta = ((tsbk >> 16) & 0xffffff)
+                if self.debug > 10:
+                    print "MOT_ADPT_PWR_CNTRL[0C]: op:0x%02x mfrid:0x%02x 0x%024x" % (opcode, mfrid, tsbk)
+            else:
+                if self.debug > 10:
+                    print "TSBK: %024X (UNKNOWN MFG 0x%02x OPCODE 0x%02x)" % (tsbk, mfrid, opcode)
+        elif opcode == 0x0d:   # reserved
+            if mfrid == 0x90: #MOT_IDEN_UP_TDMA
+                #Channel Types
+                #0 FDMA 12.5kHz 1 slot Half rate
+                #1 FDMA 12.5kHz 1 slot Full rate
+                #2 FDMA 6.25kHz 1 slot Half rate
+                #3 TDMA 12.5kHz 2 slot Half rate
+                #4 TDMA 25.0kHz 4 slot Half rate
+                #5 TDMA 12.5kHz 2 slot Half rate (H-D8PSK simulcast)
+                iden = (tsbk >> 76) & 0xf
+                channel_type = (tsbk >> 72) & 0xf
+                toff0 = (tsbk >> 58) & 0x3fff
+                spac = (tsbk >> 48) & 0x3ff
+                f1 = (tsbk >> 16) & 0xffffffff
+
+                toff_sign = (toff0 >> 13) & 1
+                toff = toff0 & 0x1fff
+                if toff_sign == 0:
+                    toff = 0 - toff
+                slots_per_carrier = [1,1,1,2,4,2]
+                """
+                self.freq_table[iden] = {}
+                self.freq_table[iden]['offset'] = toff * spac * 125
+                self.freq_table[iden]['step'] = spac * 125
+                self.freq_table[iden]['frequency'] = f1 * 5
+                self.freq_table[iden]['tdma'] = slots_per_carrier[channel_type]
+                """
+                if self.debug > 10:
+                    print "MOT_IDEN_UP_TDMA[0D]: id %d f %d offset %d spacing %d slots/carrier %d" % ( \
+                        iden, f1 * 5, toff * spac * 125, spac * 125, slots_per_carrier[channel_type])
+            else:
+                if self.debug > 10:
+                    print "TSBK: %024X (UNKNOWN MFG 0x%02x OPCODE 0x%02x)" % (tsbk, mfrid, opcode)
+        elif opcode == 0x0e:   # reserved
+            if mfrid == 0x90: #MOT system event.. something or other..
+                reason = (tsbk >> 72) & 0xff
+                if self.debug > 10:
+                    print "MOT_SYSTEM_EVENT[%02X]: 0x%024x, reason code: %d" % (opcode, tsbk, reason)
+            else:
+                if self.debug > 10:
+                    print "TSBK: %024X (UNKNOWN MFG 0x%02x OPCODE 0x%02x)" % (tsbk, mfrid, opcode)
+        elif opcode == 0x10:   # individual data chan grant (obsolete) : TIA-102.AABC-C page 82
+            if mfrid == 0x00: #IND_DATA_CH_GRANT (obsolete)
+                ch = (tsbk >> 64) & 0xffff
+                ta = (tsbk >> 40) & 0xffffff
+                sa = (tsbk >> 16) & 0xffffff
+                f1 = self.channel_id_to_frequency(ch)
+                if f1 == None: f1 = 0
+                if self.debug > 10:
+                    print "IND_DATA_CH_GRANT[10]: ch %x freq %f ta %d sa %d" % (ch, f1 / 1000000.0, ta, sa)
+            else:
+                if self.debug > 10:
+                    print "TSBK: UNKNOWN MFG 0x%02x OPCODE 0x%02x, %024X" % (mfrid, opcode, tsbk)
+        elif opcode == 0x11: # group data chan grant (obsolete) : TIA-102.AABC-C page 85
+            if mfrid == 0x00: #GRP_DATA_CH_GRANT (obsolete)
+                opts = (tsbk >> 72) & 0xff # Service Options: TIA-102.AABC-C page 35
+                (PRI,E,P,D,M) = get_srv_options(opts)
+
+                ch = (tsbk >> 56) & 0xffff
+                ga = (tsbk >> 40) & 0xffff
+                sa = (tsbk >> 16) & 0xffffff
+                f1 = self.channel_id_to_frequency(ch)
+                if f1 == None: f1 = 0
+                if self.debug > 10:
+                    print "GRP_DATA_CH_GRANT[11]: ch %x, freq %f, ga %d, sa %d, opts 0x%02X" % (ch, f1 / 1000000.0, ga, sa, opts)
+            else:
+                if self.debug > 10:
+                    print "TSBK: UNKNOWN MFG 0x%02x OPCODE 0x%02x, %024X" % (mfrid, opcode, tsbk)
+        elif opcode == 0x12: # group data chan announcement (obsolete) : TIA-102.AABC-C page 87
+            if mfrid == 0x00: #GRP_DATA_CH_ANN (obsolete)
+                ch1 = (tsbk >> 64) & 0xffff
+                ga1 = (tsbk >> 48) & 0xffff
                 ch2 = (tsbk >> 32) & 0xffff
-                ga  = (tsbk >> 16) & 0xffff
+                ga2 = (tsbk >> 16) & 0xffff
                 f1 = self.channel_id_to_frequency(ch1)
                 if f1 == None: f1 = 0
-                self.update_voice_frequency(f1, tgid=ga, tdma_slot=self.get_tdma_slot(ch1))
-                if f1 and P == 0:
-                    updated += 1
-                if P == 1 and ga not in self.secure_list:
-                    self.secure_list.append(ga)
+                f2 = self.channel_id_to_frequency(ch2)
+                if f2 == None: f2 = 0
                 if self.debug > 10:
-                    print "tsbk03 grant update exp: ch %d freq %f ga %d" % (self.channel_id_to_string(ch1), f1 / 1000000.0, ga)
-        elif opcode == 0x16:   # sndcp data ch
-            ch1  = (tsbk >> 48) & 0xffff
-            ch2  = (tsbk >> 32) & 0xffff
+                    print "GRP_DATA_CH_ANN[12]: ch1 %x, freq1 %f, ga1 %d, ch2 %x, freq2 %f, ga2 %d" % (ch1, f1 / 1000000.0, ga1, ch2, f2 / 1000000.0, ga2)
+            else:
+                if self.debug > 10:
+                    print "TSBK: UNKNOWN MFG 0x%02x OPCODE 0x%02x, %024X" % (mfrid, opcode, tsbk)
+        elif opcode == 0x13: # group data chan announcement explicit (obsolete) : TIA-102.AABC-C page 88
+            if mfrid == 0x00: #GRP_DATA_CH_ANN_EXP (obsolete)
+                opts = (tsbk >> 72) & 0xff # Service Options: TIA-102.AABC-C page 35
+                (PRI,E,P,D,M) = get_srv_options(opts)
+
+                ch1 = (tsbk >> 48) & 0xffff
+                ch2 = (tsbk >> 32) & 0xffff
+                ga = (tsbk >> 16) & 0xffff
+                f1 = self.channel_id_to_frequency(ch1)
+                if f1 == None: f1 = 0
+                f2 = self.channel_id_to_frequency(ch2)
+                if f2 == None: f2 = 0
+                if self.debug > 10:
+                    print "GRP_DATA_CH_ANN_EXP[13]: ch1 %x, freq1 %f, ch2 %x, freq2 %f, ga %d, opts 0x%02X" % (ch1, f1 / 1000000.0, ch2, f2 / 1000000.0, ga, opts)
+            else:
+                if self.debug > 10:
+                    print "TSBK: UNKNOWN MFG 0x%02x OPCODE 0x%02x, %024X" % (mfrid, opcode, tsbk)
+        elif opcode == 0x14: # sndcp data chan grant : TIA-102.AABC-C page 89
+            if mfrid == 0x00: #SN_DATA_CH_GRANT
+                data_opts = ((tsbk >> 72) & 0xff) #data service options
+                (NSAPI,E,P,D,M) = get_data_srv_options(data_opts)
+
+                ch1 = (tsbk >> 56) & 0xffff
+                ch2 = (tsbk >> 40) & 0xffff
+                ta = (tsbk >> 16) & 0xffffff
+                f1 = self.channel_id_to_frequency(ch1)
+                if f1 == None: f1 = 0
+                f2 = self.channel_id_to_frequency(ch2)
+                if f2 == None: f2 = 0
+                #SN_DATA_CH_GRANT(0x14): ch1 1b freq1 851.175000 ch2 ffff freq2 0.000000 ta 5017 data_opts 0x01
+                if self.debug > 10:
+                    print "SN_DATA_CH_GRANT[14]: data_opts:0x%02X, NSAPI:%d, ch1 %d, freq1 %f, ch2 %d, freq2 %f, ta %d" % ( \
+                        data_opts, NSAPI, ch1, f1 / 1000000.0, ch2, f2 / 1000000.0, ta)
+            else:
+                if self.debug > 10:
+                    print "TSBK: UNKNOWN MFG 0x%02x OPCODE 0x%02x, %024X" % (mfrid, opcode, tsbk)
+        elif opcode == 0x15: # sndcp data page request : TIA-102.AABC-C page 90
+            if mfrid == 0x00: #SN_DATA_PAGE_REQ
+                data_opts = (tsbk >> 72) & 0xff #data service options
+                (NSAPI,E,P,D,M) = get_data_srv_options(data_opts)
+                dac = (tsbk >> 40) & 0xffff #data access control
+                ta = (tsbk >> 16) & 0xffffff
+                if self.debug > 10:
+                    print "SN_DATA_PAGE_REQ[15]: data_opts:0x%02X, NSAPI:%d, dac 0x%04x, ta %d" % (data_opts, NSAPI, dac, ta)
+            else:
+                if self.debug > 10:
+                    print "TSBK: UNKNOWN MFG 0x%02x OPCODE 0x%02x, %024X" % (mfrid, opcode, tsbk)
+        elif opcode == 0x16: # sndcp data chan announcement explicit : TIA-102.AABC-C page 91
+            if mfrid == 0x00: #SN_DATA_CH_ANN_EXP
+                data_opts  = (tsbk >> 72) & 0xff
+                (NSAPI,E,P,D,M) = get_data_srv_options(data_opts)
+                AA  = (tsbk >> 71) & 0x1 #autonomous access trunked data service availability
+                RA  = (tsbk >> 70) & 0x1 #requested access trunked data service availability
+                ch1  = (tsbk >> 48) & 0xffff
+                ch2  = (tsbk >> 32) & 0xffff
+                dac  = (tsbk >> 16) & 0xffff
+                #if self.debug > 10:
+                #    print "tsbk16 sndcp data ch: chan %x %x" %(ch1, ch2)
+                if self.debug > 10:
+                    print "SN_DATA_CH_ANN_EXP[16]: data_opts:0x%02X NSAPI:%d AA:%d RA:%d ch1:%s (%d) ch2:%s (%d) dac:%d" % ( \
+                        data_opts, NSAPI, AA, RA, self.channel_id_to_frequency(ch1), ch1, self.channel_id_to_frequency(ch2), ch2, dac)
+            else:
+                if self.debug > 10:
+                    print "TSBK: UNKNOWN MFG 0x%02x OPCODE 0x%02x, %024X" % (mfrid, opcode, tsbk)
+        elif opcode == 0x17: #reserved
             if self.debug > 10:
-                print "tsbk16 sndcp data ch: chan %x %x" %(ch1, ch2)
-        elif opcode == 0x34:   # iden_up vhf uhf
-            iden = (tsbk >> 76) & 0xf
-            bwvu = (tsbk >> 72) & 0xf
-            toff0 = (tsbk >> 58) & 0x3fff
-            spac = (tsbk >> 48) & 0x3ff
-            freq = (tsbk >> 16) & 0xffffffff
-            toff_sign = (toff0 >> 13) & 1
-            toff = toff0 & 0x1fff
-            if toff_sign == 0:
-                toff = 0 - toff
-            txt = ["mob Tx-", "mob Tx+"]
-            self.freq_table[iden] = {}
-            self.freq_table[iden]['offset'] = toff * spac * 125
-            self.freq_table[iden]['step'] = spac * 125
-            self.freq_table[iden]['frequency'] = freq * 5
+                print "TSBK: UNKNOWN MFG 0x%02x OPCODE 0x%02x, %024X" % (mfrid, opcode, tsbk)
+        elif opcode == 0x18: # status update : TIA-102.AABC-C page 180
+            if mfrid == 0x00: #STS_UPDT
+                status = (tsbk >> 64) & 0xffff
+                ta = (tsbk >> 40) & 0xffffff
+                sa = (tsbk >> 16) & 0xffffff
+                if self.debug > 10:
+                    print "STS_UPDT[18]: status 0x%04x ta %d sa %d" % (status, ta, sa)
+            else:
+                if self.debug > 10:
+                    print "TSBK: UNKNOWN MFG 0x%02x OPCODE 0x%02x, %024X" % (mfrid, opcode, tsbk)
+        elif opcode == 0x19: #reserved
             if self.debug > 10:
-                print "tsbk34 iden vhf/uhf id %d toff %f spac %f freq %f [%s]" % (iden, toff * spac * 0.125 * 1e-3, spac * 0.125, freq * 0.000005, txt[toff_sign])
-        elif opcode == 0x33:   # iden_up_tdma
-            mfrid  = (tsbk >> 80) & 0xff
-            if mfrid == 0:
+                print "TSBK: UNKNOWN MFG 0x%02x OPCODE 0x%02x, %024X" % (mfrid, opcode, tsbk)
+        elif opcode == 0x1a: # status query : TIA-102.AABC-C page 177
+            if mfrid == 0x00: #STS_Q
+                ta = (tsbk >> 40) & 0xffffff
+                sa = (tsbk >> 16) & 0xffffff
+                if self.debug > 10:
+                    print "STS_Q[1A]: ta %d sa %d" % (ta, sa)
+            else:
+                if self.debug > 10:
+                    print "TSBK: UNKNOWN MFG 0x%02x OPCODE 0x%02x, %024X" % (mfrid, opcode, tsbk)
+        elif opcode == 0x1b: #reserved
+            if self.debug > 10:
+                print "TSBK: UNKNOWN MFG 0x%02x OPCODE 0x%02x, %024X" % (mfrid, opcode, tsbk)
+        elif opcode == 0x1c: # message update : TIA-102.AABC-C page 164
+            if mfrid == 0x00: #MSG_UPDT
+                msg = (tsbk >> 64) & 0xffff
+                ta = (tsbk >> 40) & 0xffffff
+                sa = (tsbk >> 16) & 0xffffff
+                if self.debug > 10:
+                    print "MSG_UPDT[1C]: msg 0x%04X ta %d sa %d" % (msg, ta, sa)
+            else:
+                if self.debug > 10:
+                    print "TSBK: UNKNOWN MFG 0x%02x OPCODE 0x%02x, %024X" % (mfrid, opcode, tsbk)
+        elif opcode == 0x1d: # radio unit monitor command : TIA-102.AABC-C page 191
+            if mfrid == 0x00: #RAD_MON_CMD
+                tx_time = (tsbk >> 72) & 0xff #The TX Time specifies the transmission duration of the target SU in seconds
+                SM = (tsbk >> 71) & 0x1       #The 'SM' Bit indicates silent mode (0 = non-silent, 1 = silent)
+                tx_mult = (tsbk >> 64) & 0x3  #The TX Multiplier is a 2-bit value ranging from 0 to 3. It multiplies a stored value
+                #                              programmed in the target radio to represent the requested time to key the transmitter
+                #                              during the monitor function. The zero value does not cause the radio to key.
+                sa = (tsbk >> 40) & 0xffffff
+                ta = (tsbk >> 16) & 0xffffff
+                if self.debug > 10:
+                    print "RAD_MON_CMD[1D]: TX Time %d Silent mode %d TX Mult %d Source %d Target %d" % (tx_time, SM, tx_mult, sa, ta)
+            else:
+                if self.debug > 10:
+                    print "TSBK: UNKNOWN MFG 0x%02x OPCODE 0x%02x, %024X" % (mfrid, opcode, tsbk)
+        elif opcode == 0x1e: # radio unit monitor enhanced command : TIA-102.AABC-C page 212
+            if mfrid == 0x00: #RAD_MON_ENH_CMD (MBT only?)
+                if self.debug > 10:
+                    print "RAD_MON_ENH_CMD[1E]: opcode 0x%02X TSBK %024X" % (opcode, tsbk)
+            else:
+                if self.debug > 10:
+                    print "TSBK: UNKNOWN MFG 0x%02x OPCODE 0x%02x, %024X" % (mfrid, opcode, tsbk)
+        elif opcode == 0x1f:   # call alert : TIA-102.AABC-C page 152
+            if mfrid == 0x00: #CALL_ALRT
+                ta = (tsbk >> 40) & 0xffffff
+                srcid = (tsbk >> 16) & 0xffffff
+                if self.debug > 10:
+                    print "CALL_ALRT[1F]: Target Address %d Source ID %d" % (ta, srcid)
+            else:
+                if self.debug > 10:
+                    print "TSBK: UNKNOWN MFG 0x%02x OPCODE 0x%02x, %024X" % (mfrid, opcode, tsbk)
+        elif opcode == 0x20:   # acknowledge responce : TIA-102.AABC-C page 145
+            if mfrid == 0x00: #ACK_RSP_FNE
+                AIV = (tsbk >> 79) & 0x1 #additional information valid
+                EX = (tsbk >> 78) & 0x1 #
+                serv_type = (tsbk >> 72) & 0x3f
+                if EX == 0x00:
+                    sa = (tsbk >> 40) & 0xffffff
+                    ta = (tsbk >> 16) & 0xffffff #target address
+                    str_debug = "ACK_RSP_FNE[1F]: aiv %d EX %d service type 0x%02x sa %d ta %d" % (AIV, EX, serv_type, sa, ta)
+                else:
+                    wacn = (tsbk >> 52) & 0xfffff
+                    sysid = (tsbk >> 40) & 0xfff
+                    tid = (tsbk >> 16) & 0xffffff #target id
+                    str_debug = "ACK_RSP_FNE[20]: aiv %d EX %d service type 0x%02x wacn 0x%05x sysid 0x%03x tid %d" % (AIV, EX, serv_type, wacn, sysid, tid)
+                if self.debug > 10:
+                    print str_debug
+            else:
+                if self.debug > 10:
+                    print "TSBK: UNKNOWN MFG 0x%02x OPCODE 0x%02x, %024X" % (mfrid, opcode, tsbk)
+        elif opcode == 0x21:   # queue responce : TIA-102.AABC-C page 172
+            if mfrid == 0x00: #QUE_RSP
+                #This is the response to indicate a requested service can not be granted at this time.
+                #TODO needs more parsing
+                #QUE_RSP[21]: aiv:1 type(04):'VOICE' reason(2F):'target unit has queued this call' additional:7554905 target:7554899
+                #QUE_RSP[21]: aiv:1 type(12):'DATA' reason(40):'channel resources are not currently available' additional:FFFFFD(16777213) target:7353C3(7558083)
+                #
+                AIV = (tsbk >> 79) & 0x1 #additional information valid ('0' indicating that the additional information is not valid.)
+                serv_type = (tsbk >> 72) & 0x3f
+                #serv_text = get_tsbk_alias(serv_type, mfrid)
+                reason = (tsbk >> 64) & 0xff
+                #reason_text = get_QueuedResponseReason(reason)
+                additional = (tsbk >> 40) & 0xffffff
+                ta = (tsbk >> 16) & 0xffffff
+                if self.debug > 10:
+                    #print "QUE_RSP[21]: aiv:%d type(%02X):'%s' reason(%02X):'%s' additional:%d target:%d" % (AIV, serv_type, serv_text, reason, reason_text, additional, ta)
+                    print "QUE_RSP[21]: aiv:%d type(%02X):'%s' reason(%02X):'%s' additional:%d target:%d" % (AIV, serv_type, serv_text, reason, reason_text, additional, ta)
+            else:
+                if self.debug > 10:
+                    print "TSBK: UNKNOWN MFG 0x%02x OPCODE 0x%02x, %024X" % (mfrid, opcode, tsbk)
+        elif opcode == 0x22: #reserved
+            if mfrid != 0x00 and self.debug > 10:
+                print "TSBK: UNKNOWN MFG 0x%02x OPCODE 0x%02x, %024X" % (mfrid, opcode, tsbk)
+        elif opcode == 0x23: #reserved
+            if mfrid != 0x00 and self.debug > 10:
+                print "TSBK: UNKNOWN MFG 0x%02x OPCODE 0x%02x, %024X" % (mfrid, opcode, tsbk)
+        elif opcode == 0x24:   # extended function command : TIA-102.AABC-C page 156
+            if mfrid == 0x00: #EXT_FNCT_CMD
+                #TODO needs more work
+                #EXT_FNCT_CMD[24]: extfunc:007FFFFFFC ta:72
+                #EXT_FNCT_CMD[24]: extfunc:007FFFFFFC ta:22317
+                #EXT_FNCT_CMD[24]: extfunc:007FFFFFFC ta:22394
+                #EXT_FNCT_CMD[24]: extfunc:007FFFFFFC ta:7554905
+                #EXT_FNCT_CMD[24]: extfunc:007EFFFFFC ta:7554905
+                #EXT_FNCT_CMD[24]: extfunc:0x    FFFFFC ta:2196
+                func = (tsbk >> 40) & 0xffffffffff
+                ta = (tsbk >> 16) & 0xffffff
+                if self.debug > 10:
+                    print "EXT_FNCT_CMD[24]: extfunc:0x%010X ta:%d, %024X" % (func, ta, tsbk)
+            else:
+                if self.debug > 10:
+                    print "TSBK: UNKNOWN MFG 0x%02x OPCODE 0x%02x, %024X" % (mfrid, opcode, tsbk)
+        elif opcode == 0x25: #reserved
+            if mfrid != 0x00 and self.debug > 10:
+                print "TSBK: UNKNOWN MFG 0x%02x OPCODE 0x%02x, %024X" % (mfrid, opcode, tsbk)
+        elif opcode == 0x26: #reserved
+            if mfrid != 0x00 and self.debug > 10:
+                print "TSBK: UNKNOWN MFG 0x%02x OPCODE 0x%02x, %024X" % (mfrid, opcode, tsbk)
+        elif opcode == 0x27:   # deny response : TIA-102.AABC-C page 155
+            if mfrid == 0x00: #DENY_RSP
+                AIV = (tsbk >> 79) & 0x1 #additional information valid
+                serv_type = (tsbk >> 72) & 0x3f #The 6-bit Service Type (opcode) field indicates the service which is being identified. This is set
+                                                #equal to the appropriate "Opcode value" for the identified service.
+                reason = (tsbk >> 64) & 0xff
+                additional = (tsbk >> 40) & 0xffffff
+                ta = (tsbk >> 16) & 0xffffff #target address
+
+                #AIV == 0
+                call_options = (additional >> 16) & 0xff
+                ga = (additional & 0xffff) #target unit address
+
+                #AIV == 1
+                tua = additional #target unit address
+                """
+                DENY_RSP[27]: AIV:1 Type:00 (GRP_V_CH_GRANT) Reason:77 (user or system definable) Target Unit:306 (000132) Target address:22510 (0057EE)
+                DENY_RSP[27]: AIV:1 Type:00 (GRP_V_CH_GRANT) Reason:67 (user or system definable) Target Unit:306 (000132) Target address:22510 (0057EE)
+                DENY_RSP[27]: AIV:1 Type:00 (GRP_V_CH_GRANT) Reason:77 (user or system definable) Target Unit:306 (000132) Target address:22520 (0057F8)
+                DENY_RSP[27]: AIV:1 Type:00 (GRP_V_CH_GRANT) Reason:67 (user or system definable) Target Unit:306 (000132) Target address:22481 (0057D1)
+                DENY_RSP[27]: AIV:1 Type:00 (GRP_V_CH_GRANT) Reason:77 (user or system definable) Target Unit:306 (000132) Target address:22359 (005757)
+                DENY_RSP[27]: AIV:0 Type:29 (SCCB_EXP) Reason:67 (user or system definable) Options:0x00 Group address:0 (0000) Target address:21727 (0054DF)
+
+                DENY_RSP[27]: AIV:1 Type:00 (GRP_V_CH_GRANT) Reason:0x77 (user or system definable) Target Unit:5 (000005) Target address:655 (00028F)
+                DENY_RSP[27]: 2700807700000500028F00EC
+                DENY_RSP[27]: AIV:1 Type:00 (GRP_V_CH_GRANT) Reason:0x67 (user or system definable) Target Unit:106 (00006A) Target address:7552240 (733CF0)
+                DENY_RSP[27]: 2700806700006A733CF09211
+                DENY_RSP[27]: AIV:1 Type:13 (GRP_DATA_CH_ANN_EXP) Reason:0xC0 (user or system definable) Target Unit:16777213 (FFFFFD) Target address:3471 (000D8F)
+                DENY_RSP[27]: 270093C0FFFFFD000D8F1ABD
+                DENY_RSP[27]: AIV:0 Type:29 (SCCB_EXP) Reason:0x67 (user or system definable) Options:0x00 Group address:0 (0000) Target address:21727 (0054DF)
+                DENY_RSP[27]: A70029670000000054DF4EEA
+                """
+                if self.debug > 10:
+                    if AIV == 0:
+                        #print "DENY_RSP[27]: AIV:%d Type:%02X (%s) Reason:0x%02X (%s) Options:0x%02X Group address:%d (%04X) Target address:%d (%06X)" % (AIV, serv_type, get_tsbk_desc(serv_type, mfrid), reason, get_DenyResponseReason(reason, mfrid), call_options, ga, ga, ta, ta)
+                        print "DENY_RSP[27]: AIV:%d, Type:%02X, Reason:0x%02X, Options:0x%02X, Group address:%d (%04X), Target address:%d (%06X)" % (AIV, serv_type, reason, call_options, ga, ga, ta, ta)
+                    else:
+                        #print "DENY_RSP[27]: AIV:%d Type:%02X (%s) Reason:0x%02X (%s) Target Unit:%d (%06X) Target address:%d (%06X)" % (AIV, serv_type, get_tsbk_desc(serv_type, mfrid), reason, get_DenyResponseReason(reason, mfrid), tua, tua, ta, ta)
+                        print "DENY_RSP[27]: AIV:%d, Type:%02X, Reason:0x%02X, Target Unit:%d (%06X), Target address:%d (%06X)" % (AIV, serv_type, reason, tua, tua, ta, ta)
+
+                    #print "DENY_RSP[27]: %024X" % (tsbk)
+            else:
+                if self.debug > 10:
+                    print "TSBK: UNKNOWN MFG 0x%02x OPCODE 0x%02x, %024X" % (mfrid, opcode, tsbk)
+        elif opcode == 0x28:   # group affiliation response : TIA-102.AABC-C page 160
+            if mfrid == 0x00: #GRP_AFF_RSP
+                #GRP_AFF_RSP(0x28): 28000000000065733C410000
+                #GRP_AFF_RSP(0x28): A800000000038400234D0000
+                #GRP_AFF_RSP(0x28): LG 0 GAV accept aga 0 ga 5 ta 674
+                #GRP_AFF_RSP(0x28): LG 0 GAV accept aga 0 ga 5 ta 674
+                #GRP_AFF_RSP(0x28): LG 0 GAV accept aga 0 ga 5 ta 674
+                #GRP_AFF_RSP(0x28): LG 0 GAV accept aga 0 ga 5 ta 674
+                #GRP_AFF_RSP(0x28): LG 0 GAV accept aga 0 ga 825 ta 7560910
+                #GRP_AFF_RSP(0x28): LG 0 GAV accept aga 0 ga 825 ta 7560910
+                LG = (tsbk >> 79) & 0x1 #local or global affiliation (reserved for possible use in the future)
+                GAV = (tsbk >> 72) & 0x3 #group affiliation value
+                #gav = get_GroupAffiliationValue(GAV)
+
+                aga = (tsbk >> 56) & 0xffff #announcement group address
+                ga = (tsbk >> 40) & 0xffff #group address
+                ta = (tsbk >> 16) & 0xffffff #target address
+
+                if self.debug > 10:
+                    print "GRP_AFF_RSP[28]: LG %d GAV %d aga %d ga %d ta %d" % (LG, GAV, aga, ga, ta)
+            else:
+                if self.debug > 10:
+                    print "TSBK: UNKNOWN MFG 0x%02x OPCODE 0x%02x, %024X" % (mfrid, opcode, tsbk)
+        elif opcode == 0x29:   # secondary ctrl chan bcst explicit : TIA-102.AABC-C page 200
+            if mfrid == 0x00: #SCCB_EXP
+                rfid = (tsbk >> 72) & 0xff
+                stid = (tsbk >> 64) & 0xff
+                ch1 = (tsbk >> 48) & 0xffff
+                ch2 = (tsbk >> 24) & 0xffff
+                f1 = self.channel_id_to_frequency(ch1)
+                f2 = self.channel_id_to_frequency(ch2)
+                ssc = (tsbk >> 16) & 0xff
+                #System Service Class: This is the 8-bit System Service Class field that indicates
+                #the basic functions of what the trunking will support. The defined values are:
+                #  0x01 - composite trunking
+                #  0x02 - no service requests; update trunking only
+                #  0x04 - backup trunking only
+                #  0x08 - reserved for future definition
+                #  0x10 - data service requests only
+                #  0x20 - voice service requests only
+                #  0x40 - registration services only
+                #  0x80 - authentication service only
+                #These values may be ORed together to give different service class definitions. A few of the many possibilities
+                #are given below for examples. Other values not listed here are also allowed.
+                #  0x00 - no services, either trunked or conventional
+                #  0xF0 - all service, not a backup trunking
+                if f1 and f2:
+                    self.secondary[f1] = 1
+                    self.secondary[f2] = 1
+                    sorted_freqs = collections.OrderedDict(sorted(self.secondary.items()))
+                    self.secondary = sorted_freqs
+                if self.debug > 10:
+                    #print "SCCB_EXP[29]: %024X" % (tsbk)
+                    #print "SCCB_EXP[29]: rfid %02d stid %03d ch1 %d ch2 %d ssc 0x%02X" %(rfid, stid, ch1, ch2, ssc)
+                    print "SCCB_EXP[29]: rfid %x stid %d ch1 %x(%s) ch2 %x(%s) ssc 0x%02X" % (rfid, stid, ch1, self.channel_id_to_string(ch1), ch2, self.channel_id_to_string(ch2), ssc)
+            else:
+                if self.debug > 10:
+                    print "TSBK: UNKNOWN MFG 0x%02x OPCODE 0x%02x, %024X" % (mfrid, opcode, tsbk)
+        elif opcode == 0x2a:   # group affiliation query : TIA-102.AABC-C page 158
+            if mfrid == 0x00: #GRP_AFF_Q
+                #GRP_AFF_Q(0x2A): AA000000002712FFFFFD0000
+                #GRP_AFF_Q(0x2A): 2A000000002712FFFFFD0000
+                #GRP_AFF_Q(0x2A): AA000000000062FFFFFD0000
+                ta = (tsbk >> 40) & 0xffffff #target address
+                sa = (tsbk >> 16) & 0xffffff #source address
+                if self.debug > 10:
+                    print "GRP_AFF_Q[2A]: ta %d sa %d" % (ta, sa)
+            else:
+                if self.debug > 10:
+                    print "TSBK: UNKNOWN MFG 0x%02x OPCODE 0x%02x, %024X" % (mfrid, opcode, tsbk)
+        elif opcode == 0x2b:   # location registration response : TIA-102.AABC-C page 190
+            if mfrid == 0x00: #LOC_REG_RSP
+                RV = (tsbk >> 72) & 0x3 #registration value
+                if RV == 0:
+                    rv = 'accept'
+                elif RV == 1:
+                    rv = 'fail'
+                elif RV == 2:
+                    rv = 'deny'
+                elif RV == 3:
+                    rv = 'refused'
+                ga = (tsbk >> 56) & 0xffff #group address
+                rfss = (tsbk >> 48) & 0xff # rfss id
+                stid = (tsbk >> 40) & 0xff # site id
+                ta = (tsbk >> 16) & 0xffffff #target address
+                if self.debug > 10:
+                    print "LOC_REG_RSP[2B]: registration %s, ga %d rfss %d stid %d ta %d" % (rv, ga, rfss, stid, ta)
+            else:
+                if self.debug > 10:
+                    print "TSBK: UNKNOWN MFG 0x%02x OPCODE 0x%02x, %024X" % (mfrid, opcode, tsbk)
+        elif opcode == 0x2c:   # unit registration response : TIA-102.AABC-C page 187
+            if mfrid == 0x00: #U_REG_RSP
+                RV = (tsbk >> 76) & 0x3 #registration value
+                if RV == 0:
+                    rv = 'accept'
+                elif RV == 1:
+                    rv = 'fail'
+                elif RV == 2:
+                    rv = 'deny'
+                elif RV == 3:
+                    rv = 'refused'
+                sysid = (tsbk >> 64) & 0xfff #system id
+                si = (tsbk >> 40) & 0xffffff #source id
+                sa = (tsbk >> 16) & 0xffffff #source address
+                if self.debug > 10:
+                    print "U_REG_RSP[2C]: registration %s, sysid %03X si %d sa %d" % (rv, sysid, si, sa)
+            else:
+                if self.debug > 10:
+                    print "TSBK: UNKNOWN MFG 0x%02x OPCODE 0x%02x, %024X" % (mfrid, opcode, tsbk)
+        elif opcode == 0x2d:   # unit registration command : TIA-102.AABC-C page 186
+            if mfrid == 0x00: #U_REG_CMD
+                ti = (tsbk >> 40) & 0xffffff #target id
+                sa = (tsbk >> 16) & 0xffffff #source address
+                if self.debug > 10:
+                    print "U_REG_CMD[2D]: ti %d sa %d" % (ti, sa)
+            else:
+                if self.debug > 10:
+                    print "TSBK: UNKNOWN MFG 0x%02x OPCODE 0x%02x, %024X" % (mfrid, opcode, tsbk)
+        elif opcode == 0x2e:   # authentication command (OBSOLETE) : TIA-102.AABC-C page 151
+            if mfrid == 0x00: #AUTH_CMD
+                wacn = (tsbk >> 52) & 0xfffff
+                sysid = (tsbk >> 40) & 0xfff
+                ti = (tsbk >> 16) & 0xffffff #target id
+                if self.debug > 10:
+                    print "AUTH_CMD[2E]: wacn %05X sysid %03X ti %d" % (wacn, sysid, ti)
+            else:
+                if self.debug > 10:
+                    print "TSBK: UNKNOWN MFG 0x%02x OPCODE 0x%02x, %024X" % (mfrid, opcode, tsbk)
+        elif opcode == 0x2f:   # de-registration acknowledge : TIA-102.AABC-C page 189
+            if mfrid == 0x00: #U_DE_REG_ACK
+                wacn = (tsbk >> 52) & 0xfffff
+                sysid = (tsbk >> 40) & 0xfff
+                src = (tsbk >> 16) & 0xffffff
+                #U_DE_REG_ACK(0x2F): 2F0000BEE003BA0002990000
+                #U_DE_REG_ACK(0x2F): AF0000BEE003BA00234D0000
+                #print "U_DE_REG_ACK(0x2F): %024X" % (tsbk)
+                if self.debug > 10:
+                    print "U_DE_REG_ACK[2F]: wacn %05X sysid %03X src %d" % (wacn, sysid, src)
+            else:
+                if self.debug > 10:
+                    print "TSBK: UNKNOWN MFG 0x%02x OPCODE 0x%02x, %024X" % (mfrid, opcode, tsbk)
+        elif opcode == 0x30:   #synchronization broadcast : TIA-102.AABC-C page 210
+            if mfrid == 0x00: #SYNC_BCST
+                #SYNC_BCST(0x30): 300000042C1E432C053C0000
+                #SYNC_BCST(0x30): B00000042C1E432C055A0000
+                us = (tsbk >> 67) & 0x1 #Un-Synced; 1 = indicates P2 TDMA traffic chans not synced, 0 = are synced with FDMA CC
+                ist = (tsbk >> 66) & 0x1 #invalid system time; 1 = unreliable(no external sync clock), 0 = valid and reliable
+                mmu = (tsbk >> 65) & 0x1 #1 = microslot minute not locked, 0 = microslot minute locked
+                mc = (tsbk >> 63) & 0x3 #minute correction (2.5ms leap second correction)
+                vl = (tsbk >> 62) & 0x1 #1 = lto contains valid info, 0 = lto should be ignored
+                utc = (tsbk >> 61) & 0x1 #1 = subtract utc, 0 = add utc
+                utc_des = '+'
+                if utc == 1:
+                    utc_des = '-'
+                lto = ((tsbk >> 56) & 0x1f) * 0.5 #local time offset (30 minute increments)
+                year = ((tsbk >> 49) & 0x7f) + 2000 #2k assumed
+                month = (tsbk >> 45) & 0xf
+                day = (tsbk >> 40) & 0x1f
+                hours = (tsbk >> 35) & 0x1f
+                #hours -= lto
+                minutes = (tsbk >> 29) & 0x2f
+                microslots = (tsbk >> 16) & 0x1fff #0.0075 ms boundry. (0-7999)
+                seconds = int(microslots * 0.0075)
+
+                #mydate1 = datetime.date(year, month, day)  #year, month, day
+                #mydate2 = datetime.datetime(year, month, day, hours, minutes, seconds)  #year, month, day
+                #ts_str = strftime("%d %b %Y %H:%M:%S", mydate2)
+                #bcst_time = "%02d/%02d/%04d %02d:%02d:%02d utc:%02d lto:%s%d" % (month, day, year, hours, minutes, seconds, utc, utc_des, lto)
+                bcst_time = "%02d/%02d/%04d %02d:%02d:%02d (UTC)" % (month, day, year, hours, minutes, seconds)
+                #self.stats['systime'] = bcst_time
+                #print "SYNC_BCST[30]: US %d ist %d mmu %d mc %d vl %d date/time %s (%s%d utc)" % (us, ist, mmu, mc, vl, bcst_time, utc_des, lto)
+                if self.debug > 10:
+                    print "SYNC_BCST[30]: US %d ist %d mmu %d mc %d vl %d date/time %s (%s%d utc)" % (us, ist, mmu, mc, vl, bcst_time, utc_des, lto)
+            else:
+                if self.debug > 10:
+                    print "TSBK: UNKNOWN MFG 0x%02x OPCODE 0x%02x, %024X" % (mfrid, opcode, tsbk)
+        elif opcode == 0x31:   # authentication demand : TIA-102.AABC-C page 203
+            if mfrid == 0x00: #AUTH_DMD
+                if self.debug > 10:
+                    print "AUTH_DMD[31]: %024X" % (tsbk)
+            else:
+                if self.debug > 10:
+                    print "TSBK: UNKNOWN MFG 0x%02x OPCODE 0x%02x, %024X" % (mfrid, opcode, tsbk)
+        elif opcode == 0x32:   #authentication FNE response : TIA-102.AABC-C page 205 (enhanced only?)
+            if mfrid == 0x00: #AUTH_FNE_RESP
+                res = (tsbk >> 72) & 0xff #reserved?
+                resp = (tsbk >> 40) & 0xffffffff #response?
+                ti = (tsbk >> 16) & 0xffffff #target id
+                if self.debug > 10:
+                    print "AUTH_FNE_RESP[32]: res 0x%02X resp 0x%06X ti %d" % (res, resp, ti)
+            else:
+                if self.debug > 10:
+                    print "TSBK: UNKNOWN MFG 0x%02x OPCODE 0x%02x, %024X" % (mfrid, opcode, tsbk)
+        elif opcode == 0x33:   # iden_up_tdma : TIA-102.AABC-C page 208
+            if mfrid == 0x00:
                 iden = (tsbk >> 76) & 0xf
                 channel_type = (tsbk >> 72) & 0xf
                 toff0 = (tsbk >> 58) & 0x3fff
@@ -415,86 +1148,269 @@ class trunked_system (object):
                 toff = toff0 & 0x1fff
                 if toff_sign == 0:
                     toff = 0 - toff
-                f1   = (tsbk >> 16) & 0xffffffff
+                f1 = (tsbk >> 16) & 0xffffffff
                 slots_per_carrier = [1,1,1,2,4,2]
+                #0 FDMA 12.5kHz 1 slot Half rate
+                #1 FDMA 12.5kHz 1 slot Full rate
+                #2 FDMA 6.25kHz 1 slot Half rate
+                #3 TDMA 12.5kHz 2 slot Half rate
+                #4 TDMA 25.0kHz 4 slot Half rate
+                #5 TDMA 12.5kHz 2 slot Half rate (H-D8PSK simulcast)
                 self.freq_table[iden] = {}
                 self.freq_table[iden]['offset'] = toff * spac * 125
                 self.freq_table[iden]['step'] = spac * 125
                 self.freq_table[iden]['frequency'] = f1 * 5
                 self.freq_table[iden]['tdma'] = slots_per_carrier[channel_type]
                 if self.debug > 10:
-                    print "tsbk33 iden up tdma id %d f %d offset %d spacing %d slots/carrier %d" % (iden, self.freq_table[iden]['frequency'], self.freq_table[iden]['offset'], self.freq_table[iden]['step'], self.freq_table[iden]['tdma'])
+                    print "IDEN_UP_TDMA[33]: id %d f %d offset %d spacing %d slots/carrier %d" % (iden, self.freq_table[iden]['frequency'], self.freq_table[iden]['offset'], self.freq_table[iden]['step'], self.freq_table[iden]['tdma'])
+                #print "IDEN_UP_TDMA: id %d f %d offset %d spacing %d slots/carrier %d" % (iden, self.freq_table[iden]['frequency'], self.freq_table[iden]['offset'], self.freq_table[iden]['step'], self.freq_table[iden]['tdma'])
+            elif mfrid == 0xA4: #Harris/MACOM
+                #http://forums.radioreference.com/voice-control-channel-decoding-software/135222-pro96com-showing-unkown-packets-4.html#post2355158
+                #B3 A4 A6 0A 23 10 70 80 02 36 C0 38 03/07 18:02:35 Harris/MACOM Packet - Unknown Function - Control Channel: 0-0514(857.43750)
+                #Hex: B3 A4 A60A231070800236 C038
+                chr1 = ((tsbk >> 74) & 0x3f) + 0x2e
+                chr2 = ((tsbk >> 68) & 0x3f) + 0x2e
+                chr3 = ((tsbk >> 62) & 0x3f) + 0x2e
+                chr4 = ((tsbk >> 56) & 0x3f) + 0x2e
+                chr5 = ((tsbk >> 50) & 0x3f) + 0x2e
+                chr6 = ((tsbk >> 44) & 0x3f) + 0x2e
+                chr7 = ((tsbk >> 38) & 0x3f) + 0x2e
+                chr8 = ((tsbk >> 32) & 0x3f) + 0x2e
+                ch = (tsbk >> 16) & 0xffff
+                ch_id = ch & 0xfff
+                bsi = '%s%s%s%s%s%s%s%s' % (chr(chr1),chr(chr2),chr(chr3),chr(chr4),chr(chr5),chr(chr6),chr(chr7),chr(chr8))
+                f = self.channel_id_to_frequency(ch)
+                ts = strftime("%a, %d %b %Y %H:%M:%S", time.localtime())
+                if self.debug > 10:
+                    print "MACOM BSI: Call sign:'%s' ch:%d freq %f (%s)" % (bsi, ch, f / 1000000.0, ts)
+            else:
+                if self.debug > 10:
+                    print "TSBK: UNKNOWN MFG 0x%02x OPCODE 0x%02x, %024X" % (mfrid, opcode, tsbk)
+        elif opcode == 0x34:   # iden_up vhf uhf : TIA-102.AABC-C page 201
+            if mfrid == 0x00:
+                iden = (tsbk >> 76) & 0xf
+                bwvu = (tsbk >> 72) & 0xf #rx bandwifth; 0100 6.25kHz, 0101 12.5kHz
+                toff0 = (tsbk >> 58) & 0x3fff
+                spac = (tsbk >> 48) & 0x3ff
+                freq = (tsbk >> 16) & 0xffffffff
+                toff_sign = (toff0 >> 13) & 1 #0: SUTX < SURX, sign = -1
+                                              #1: SUTX > SURX, sign = +1
+                toff = toff0 & 0x1fff
+                if toff_sign == 0:
+                    toff = 0 - toff
+                txt = ["mob Tx-", "mob Tx+"]
+                self.freq_table[iden] = {}
+                self.freq_table[iden]['offset'] = toff * spac * 125
+                self.freq_table[iden]['step'] = spac * 125
+                self.freq_table[iden]['frequency'] = freq * 5
+                if self.debug > 10:
+                    print "IDEN_UP_VU[34]: id %d toff %f spac %f freq %f [%s]" % (iden, toff * spac * 0.125 * 1e-3, spac * 0.125, freq * 0.000005, txt[toff_sign])
+            else:
+                if self.debug > 10:
+                    print "TSBK: UNKNOWN MFG 0x%02x OPCODE 0x%02x, %024X" % (mfrid, opcode, tsbk)
+        elif opcode == 0x35:   # time announce : TIA-102.AABC-C page 198
+            if mfrid == 0x00:
+                seconds = ((tsbk >> 23) & 0x3f)
+                minutes = ((tsbk >> 29) & 0x3f)
+                hours = ((tsbk >> 35) & 0x1f)
+                year = ((tsbk >> 42) & 0x1fff)
+                day = ((tsbk >> 55) & 0x1f)
+                month = ((tsbk >> 60) & 0xf)
+                offset = ((tsbk >> 64) & 0x7ff) #offset, in minutes
+                utc = ((tsbk >> 75) & 0x1)      #1 = subtract offset, 0 = add offset
+                vl = ((tsbk >> 77) & 0x1)       #1 = valid offset, 0 = ignore offset
+                vt = ((tsbk >> 78) & 0x1)       #1 = valid time fields, 0 = ignore time fields
+                vd = ((tsbk >> 79) & 0x1)       #1 = valid date fields, 0 = ignore date fields
+                if self.debug > 10:
+                    print "TIME_DATE_ANN[35]: %02d:%02d:%04d %02d:%02d:%02d" % (month, day, year, hours, minutes, seconds)
+            else:
+                if self.debug > 10:
+                    print "TSBK: UNKNOWN MFG 0x%02x OPCODE 0x%02x, %024X" % (mfrid, opcode, tsbk)
+        elif opcode == 0x36:   #roaming address command : TIA-102.AABC-C page 194
+            if mfrid == 0x00: #ROAM_ADDR_CMD
+                if self.debug > 10:
+                    print "ROAM_ADDR_CMD[36]: %024X" % (tsbk)
+            else:
+                if self.debug > 10:
+                    print "TSBK: UNKNOWN MFG 0x%02x OPCODE 0x%02x, %024X" % (mfrid, opcode, tsbk)
+        elif opcode == 0x37:   #roaming address update : TIA-102.AABC-C page 195
+            if mfrid == 0x00: #ROAM_ADDR_UPDT (MBT only)
+                if self.debug > 10:
+                    print "ROAM_ADDR_UPDT[37]: %024X" % (tsbk)
+            else:
+                if self.debug > 10:
+                    print "TSBK: UNKNOWN MFG 0x%02x OPCODE 0x%02x, %024X" % (mfrid, opcode, tsbk)
+        elif opcode == 0x38:   # system service broadcast : TIA-102.AABC-C page 183
+            if mfrid == 0x00: #SYS_SRV_BCST
+                #Richardson - SYS_SRV_BCST: 0x00 0x2f2e7f 0x2f2e7f 0x01
+                #      Dart - SYS_SRV_BCST: 0x00 0x0f6c10 0x0f6c10 0x01
+                twuid = (tsbk >> 72) & 0xff
+                srv_avail = (tsbk >> 48) & 0xffffff
+                srv_supp = (tsbk >> 24) & 0xffffff
+                pri = (tsbk >> 16) & 0xff
+                if self.debug > 10:
+                    print "SYS_SRV_BCST[38]: 0x%02x 0x%06x 0x%06x 0x%02x" % (twuid, srv_avail, srv_supp, pri)
+            else:
+                if self.debug > 10:
+                    print "TSBK: UNKNOWN MFG 0x%02x OPCODE 0x%02x, %024X" % (mfrid, opcode, tsbk)
+        elif opcode == 0x39:   # Secondary Control Channel Broadcast : TIA-102.AABC-C page 176
+            if mfrid == 0x00: #SCCB
+                rfid = (tsbk >> 72) & 0xff
+                stid = (tsbk >> 64) & 0xff
+                ch1  = (tsbk >> 48) & 0xffff
+                ssc1 = (tsbk >> 40) & 0xff
+                ch2  = (tsbk >> 24) & 0xffff
+                ssc2 = (tsbk >> 16) & 0xff
+                f1 = self.channel_id_to_frequency(ch1)
+                f2 = self.channel_id_to_frequency(ch2)
+                if f1 and f2:
+                    self.secondary[ f1 ] = 1
+                    self.secondary[ f2 ] = 1
+                    sorted_freqs = collections.OrderedDict(sorted(self.secondary.items()))
+                    self.secondary = sorted_freqs
+                if self.debug > 10:
+                    print "SCCB[39]: rfid %x stid %d ch1 %x(%s) ch2 %x(%s)" % (rfid, stid, ch1, self.channel_id_to_string(ch1), ch2, self.channel_id_to_string(ch2))
+            else:
+                if self.debug > 10:
+                    print "TSBK: UNKNOWN MFG 0x%02x OPCODE 0x%02x, %024X" % (mfrid, opcode, tsbk)
+        elif opcode == 0x3a:   # rfss status broadcast : TIA-102.AABC-C page 174
+            if mfrid == 0x00: #RFSS_STS_BCST
+                #RFSS_STS_BCST[3A]: syid: 3ba rfid 1 stid 1 ch1 16b(853.275000), 3A000033BA0101016B707896
+                #3A 00 0033BA0101016B70 7896
+                #3a 00 00340f032c007f60
+                LRA = (tsbk >> 72) & 0xff
+                R = (tsbk >> 69) & 0x1
+                A = (tsbk >> 68) & 0x1
 
-        elif opcode == 0x3d:   # iden_up
-            iden = (tsbk >> 76) & 0xf
-            bw   = (tsbk >> 67) & 0x1ff
-            toff0 = (tsbk >> 58) & 0x1ff
-            spac = (tsbk >> 48) & 0x3ff
-            freq = (tsbk >> 16) & 0xffffffff
-            toff_sign = (toff0 >> 8) & 1
-            toff = toff0 & 0xff
-            if toff_sign == 0:
-                toff = 0 - toff
-            txt = ["mob xmit < recv", "mob xmit > recv"]
-            self.freq_table[iden] = {}
-            self.freq_table[iden]['offset'] = toff * 250000
-            self.freq_table[iden]['step'] = spac * 125
-            self.freq_table[iden]['frequency'] = freq * 5
+                syid = (tsbk >> 56) & 0xfff
+                rfid = (tsbk >> 48) & 0xff
+                stid = (tsbk >> 40) & 0xff
+                chan = (tsbk >> 24) & 0xffff
+
+                ssc = (tsbk >> 16) & 0xff #system service class
+                #System Service Class: This is the 8-bit System Service Class field that indicates
+                #the basic functions of what the trunking will support. The defined values are:
+                #  0x01 - composite trunking
+                #  0x02 - no service requests; update trunking only
+                #  0x04 - backup trunking only
+                #  0x08 - reserved for future definition
+                #  0x10 - data service requests only
+                #  0x20 - voice service requests only
+                #  0x40 - registration services only
+                #  0x80 - authentication service only
+                #These values may be ORed together to give different service class definitions. A few of the many possibilities
+                #are given below for examples. Other values not listed here are also allowed.
+                #  0x00 - no services, either trunked or conventional
+                #  0xF0 - all service, not a backup trunking
+
+                f1 = self.channel_id_to_frequency(chan)
+                if f1:
+                    self.rfss_syid = syid
+                    self.rfss_rfid = rfid
+                    self.rfss_stid = stid
+                    self.rfss_chan = f1
+                    self.rfss_txchan = f1 + self.freq_table[chan >> 12]['offset']
+                if self.debug > 10:
+                    print "RFSS_STS_BCST[3A]: syid: %03X rfid %X stid %d ch1 %X(%s)" %(syid, rfid, stid, chan, self.channel_id_to_string(chan))
+            else:
+                if self.debug > 10:
+                    print "TSBK: UNKNOWN MFG 0x%02x OPCODE 0x%02x, %024X" % (mfrid, opcode, tsbk)
+        elif opcode == 0x3b:   # network status broadcast : TIA-102.AABC-C page 167
+            if mfrid == 0x00: #NET_STS_BCST
+                #BB 00 00 BEE00 3BA 016B 70 EFCF
+                #3B 00 00 bee07 40f 007f 60
+                lra  = (tsbk >> 72) & 0xff   #The LRA defines the region of a registration area in which a
+                                             #subscriber unit may roam without the need to indicate a location
+                                             #update to the network.
+                wacn = (tsbk >> 52) & 0xfffff
+                syid = (tsbk >> 40) & 0xfff
+                ch1  = (tsbk >> 24) & 0xffff #current ctrl chan
+                ssc  = (tsbk >> 16) & 0xff
+                f1 = self.channel_id_to_frequency(ch1)
+                if f1:
+                    self.ns_syid = syid
+                    self.ns_wacn = wacn
+                    self.ns_chan = f1
+                if self.debug > 10:
+                    print "NET_STS_BCST[3B]: WACN %05X syid %03X ch1 %X(%s)" % (wacn, syid, ch1, self.channel_id_to_string(ch1))
+            else:
+                if self.debug > 10:
+                    print "TSBK: UNKNOWN MFG 0x%02x OPCODE 0x%02x, %024X" % (mfrid, opcode, tsbk)
+        elif opcode == 0x3c:   # adjacent status broadcast : TIA-102.AABC-C page 149
+            if mfrid == 0x00: #ADJ_STS_BCST
+                LRA = (tsbk >> 72) & 0xff
+                C = (tsbk >> 71) & 0x1 #conventional channel
+                F = (tsbk >> 70) & 0x1 #0 no failure, 1 failure condition
+                V = (tsbk >> 69) & 0x1 #1 is valid, 0 last known
+                A = (tsbk >> 68) & 0x1 #active network connection with the RFSS controler
+                sysid = (tsbk >> 56) & 0xfff
+                rfid = (tsbk >> 48) & 0xff
+                stid = (tsbk >> 40) & 0xff
+                ch1  = (tsbk >> 24) & 0xffff
+                table = (ch1 >> 12) & 0xf
+                ssc  = (tsbk >> 16) & 0xff
+                f1 = self.channel_id_to_frequency(ch1)
+                if f1 and table in self.freq_table:
+                    self.adjacent[f1] = 'rfid: %d stid:%d uplink:%f tbl:%d' % (rfid, stid, (f1 + self.freq_table[table]['offset']) / 1000000.0, table)
+                if self.debug > 10:
+                    print "ADJ_STS_BCST[3C]: rfid %x stid %d ch1 %x(%s)" %(rfid, stid, ch1, self.channel_id_to_string(ch1))
+                    if table in self.freq_table:
+                        print "ADJ_STS_BCST[3C] : %s %s" % (self.freq_table[table]['frequency'] , self.freq_table[table]['step'] )
+            elif mfrid == 0x90:
+                LRA = (tsbk >> 72) & 0xff
+                ch1  = (tsbk >> 56) & 0xffff
+                table1 = (ch1 >> 12) & 0xf
+                rfid = (tsbk >> 48) & 0xff
+                stid = (tsbk >> 40) & 0xff
+                ch2  = (tsbk >> 24) & 0xffff
+                table2 = (ch2 >> 12) & 0xf
+                ssc  = (tsbk >> 16) & 0xff
+                f1 = self.channel_id_to_frequency(ch1)
+                #if f1 and table1 in self.freq_table:
+                #    self.adjacent[f1] = 'rfid: %d stid:%d uplink:%f tbl:%d' % (rfid, stid, (f1 + self.freq_table[table1]['offset']) / 1000000.0, table1)
+                f2 = self.channel_id_to_frequency(ch2)
+                #if f2 and table2 in self.freq_table:
+                #    self.adjacent[f2] = 'rfid: %d stid:%d uplink:%f tbl:%d' % (rfid, stid, (f2 + self.freq_table[table2]['offset']) / 1000000.0, table2)
+                if self.debug > 10:
+                    print "MOT_ADJ_STS_BCST_SHRT_EXP[3C]: rfid %x stid %d ch1 %x(%s) ch2 %x(%s)" %(rfid, stid, ch1, self.channel_id_to_string(ch1), ch2, self.channel_id_to_string(ch2))
+            else:
+                if self.debug > 10:
+                    print "TSBK: UNKNOWN MFG 0x%02x OPCODE 0x%02x, %024X" % (mfrid, opcode, tsbk)
+        elif opcode == 0x3d:   # identifier ipdate : TIA-102.AABC-C page 163
+            if mfrid == 0x00: #IDEN_UP
+                iden = (tsbk >> 76) & 0xf
+                bw   = (tsbk >> 67) & 0x1ff
+                toff0 = (tsbk >> 58) & 0x1ff
+                spac = (tsbk >> 48) & 0x3ff
+                freq = (tsbk >> 16) & 0xffffffff
+                toff_sign = (toff0 >> 8) & 1
+                toff = toff0 & 0xff
+                if toff_sign == 0:
+                    toff = 0 - toff
+                txt = ["mob xmit < recv", "mob xmit > recv"]
+                self.freq_table[iden] = {}
+                self.freq_table[iden]['offset'] = toff * 250000
+                self.freq_table[iden]['step'] = spac * 125
+                self.freq_table[iden]['frequency'] = freq * 5
+                if self.debug > 10:
+                    print "IDEN_UP[3D]: id %d toff %f spac %f freq %f" % (iden, toff * 0.25, spac * 0.125, freq * 0.000005)
+            else:
+                if self.debug > 10:
+                    print "TSBK: UNKNOWN MFG 0x%02x OPCODE 0x%02x, %024X" % (mfrid, opcode, tsbk)
+        elif opcode == 0x3f:   # 
+            if mfrid == 0x00: #P_PARM_UPDT (obsolete)
+                algo = (tsbk >> 56) & 0xff
+                keyid = (tsbk >> 40) & 0xffff
+                tid = (tsbk >> 16) & 0xffffff
+                if self.debug > 10:
+                    print "P_PARM_UPDT[3F]: algo 0x%02X keyid 0x%04X tid %d" % (algo, keyid, tid)
+            else:
+                if self.debug > 10:
+                    print "TSBK: UNKNOWN MFG 0x%02x OPCODE 0x%02x, %024X" % (mfrid, opcode, tsbk)
+        else:
             if self.debug > 10:
-                print "tsbk3d iden id %d toff %f spac %f freq %f" % (iden, toff * 0.25, spac * 0.125, freq * 0.000005)
-        elif opcode == 0x3a:   # rfss status
-            syid = (tsbk >> 56) & 0xfff
-            rfid = (tsbk >> 48) & 0xff
-            stid = (tsbk >> 40) & 0xff
-            chan = (tsbk >> 24) & 0xffff
-            f1 = self.channel_id_to_frequency(chan)
-            if f1:
-                self.rfss_syid = syid
-                self.rfss_rfid = rfid
-                self.rfss_stid = stid
-                self.rfss_chan = f1
-                self.rfss_txchan = f1 + self.freq_table[chan >> 12]['offset']
-            if self.debug > 10:
-                print "tsbk3a rfss status: syid: %x rfid %x stid %d ch1 %x(%s)" %(syid, rfid, stid, chan, self.channel_id_to_string(chan))
-        elif opcode == 0x39:   # secondary cc
-            rfid = (tsbk >> 72) & 0xff
-            stid = (tsbk >> 64) & 0xff
-            ch1  = (tsbk >> 48) & 0xffff
-            ch2  = (tsbk >> 24) & 0xffff
-            f1 = self.channel_id_to_frequency(ch1)
-            f2 = self.channel_id_to_frequency(ch2)
-            if f1 and f2:
-                self.secondary[ f1 ] = 1
-                self.secondary[ f2 ] = 1
-                sorted_freqs = collections.OrderedDict(sorted(self.secondary.items()))
-                self.secondary = sorted_freqs
-            if self.debug > 10:
-                print "tsbk39 secondary cc: rfid %x stid %d ch1 %x(%s) ch2 %x(%s)" %(rfid, stid, ch1, self.channel_id_to_string(ch1), ch2, self.channel_id_to_string(ch2))
-        elif opcode == 0x3b:   # network status
-            wacn = (tsbk >> 52) & 0xfffff
-            syid = (tsbk >> 40) & 0xfff
-            ch1  = (tsbk >> 24) & 0xffff
-            f1 = self.channel_id_to_frequency(ch1)
-            if f1:
-                self.ns_syid = syid
-                self.ns_wacn = wacn
-                self.ns_chan = f1
-            if self.debug > 10:
-                print "tsbk3b net stat: wacn %x syid %x ch1 %x(%s)" %(wacn, syid, ch1, self.channel_id_to_string(ch1))
-        elif opcode == 0x3c:   # adjacent status
-            rfid = (tsbk >> 48) & 0xff
-            stid = (tsbk >> 40) & 0xff
-            ch1  = (tsbk >> 24) & 0xffff
-            table = (ch1 >> 12) & 0xf
-            f1 = self.channel_id_to_frequency(ch1)
-            if f1 and table in self.freq_table:
-                self.adjacent[f1] = 'rfid: %d stid:%d uplink:%f tbl:%d' % (rfid, stid, (f1 + self.freq_table[table]['offset']) / 1000000.0, table)
-            if self.debug > 10:
-                print "tsbk3c adjacent: rfid %x stid %d ch1 %x(%s)" %(rfid, stid, ch1, self.channel_id_to_string(ch1))
-                if table in self.freq_table:
-                    print "tsbk3c : %s %s" % (self.freq_table[table]['frequency'] , self.freq_table[table]['step'] )
-            #else:
-            #	print "tsbk other %x" % opcode
+                print "TSBK: UNKNOWN MFG 0x%02x OPCODE 0x%02x, %024X" % (mfrid, opcode, tsbk)
+
         return updated
 
     def hunt_cc(self, curr_time):
@@ -693,7 +1609,7 @@ class rx_ctl (object):
             self.update_state('tdma_duid%d' % type, curr_time)
             return
         s = s[2:]
-        if self.debug > 10:
+        if self.debug >= 20:
             print "nac %x type %d at %f state %d len %d" %(nac, type, time.time(), self.state, len(s))
         if (type == 7 or type == 12) and nac not in self.trunked_systems:
             if not self.configs:
@@ -715,7 +1631,7 @@ class rx_ctl (object):
             for c in s2:
                 mbt_data = (mbt_data << 8) + ord(c)
             opcode = (header >> 32) & 0x3f
-            if self.debug > 10:
+            if self.debug >= 20:
                 print "type %d at %f state %d len %d/%d opcode %x [%x/%x]" %(type, time.time(), self.state, len(s1), len(s2), opcode, header,mbt_data)
             self.trunked_systems[nac].decode_mbt_data(opcode, header, mbt_data)
 

@@ -210,7 +210,7 @@ p25p1_fdma::p25p1_fdma(const char* udp_host, int port, int debug, bool do_imbe, 
 	output_queue(output_queue),
 	framer(new p25_framer()),
 	d_do_audio_output(do_audio_output),
-	p1voice_decode((debug > 0), udp_host, port, output_queue)
+	p1voice_decode((debug >= 20), udp_host, port, output_queue)
 {
 	gettimeofday(&last_qtime, 0);
 	if (port > 0)
@@ -245,7 +245,7 @@ p25p1_fdma::rx_sym (const uint8_t *syms, int nsyms)
   struct timeval currtime;
   for (int i1 = 0; i1 < nsyms; i1++){
     if(framer->rx_sym(syms[i1])) {   // complete frame was detected
-		if (d_debug >= 10) {
+		if (d_debug >= 20) {
 			fprintf (stderr, "NAC 0x%X DUID 0x%X len %u errs %u ", framer->nac, framer->duid, framer->frame_size >> 1, framer->bch_errors);
 		}
 		if ((framer->duid == 0x03) ||
@@ -289,16 +289,16 @@ p25p1_fdma::rx_sym (const uint8_t *syms, int nsyms)
 				process_duid(framer->duid, framer->nac, mbt_block, sizeof(mbt_block));
 			}
 		}
-		if (d_debug >= 10 && framer->duid == 0x00) {
+		if (d_debug >= 20 && framer->duid == 0x00) {
 			ProcHDU(framer->frame_body);
-		} else if (d_debug > 10 && framer->duid == 0x05) {
+		} else if (d_debug > 20 && framer->duid == 0x05) {
 			ProcLDU1(framer->frame_body);
-		} else if (d_debug >= 10 && framer->duid == 0x0a) {
+		} else if (d_debug >= 20 && framer->duid == 0x0a) {
 			ProcLDU2(framer->frame_body);
-		} else if (d_debug > 10 && framer->duid == 0x0f) {
+		} else if (d_debug > 20 && framer->duid == 0x0f) {
 			ProcTDU(framer->frame_body);
 		}
-		if (d_debug >= 10)
+		if (d_debug >= 20)
 			fprintf(stderr, "\n");
 		if ((d_do_imbe || d_do_audio_output) && (framer->duid == 0x5 || framer->duid == 0xa)) {  // if voice - ldu1 or ldu2
 			for(size_t i = 0; i < nof_voice_codewords; ++i) {
