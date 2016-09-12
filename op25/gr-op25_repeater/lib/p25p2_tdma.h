@@ -34,34 +34,34 @@ class p25p2_tdma;
 class p25p2_tdma
 {
 public:
-	p25p2_tdma(int slotid, int debug, std::deque<int16_t> &qptr) ;	// constructor
-	int handle_packet(const uint8_t dibits[]) ;
-	void set_slotid(int slotid);
-	uint8_t* tdma_xormask;
-	uint32_t symbols_received;
-	uint32_t packets;
-	~p25p2_tdma();	// destructor
-	void set_xormask(const char*p);
-	bool rx_sym(uint8_t sym);
-	int handle_frame(void) ;
+    p25p2_tdma(int slotid, int debug, std::deque<int16_t> &qptr);  // constructor
+    int handle_packet(const uint8_t dibits[]) ;
+    void set_slotid(int slotid);
+    uint8_t* tdma_xormask;
+    uint32_t symbols_received;
+    uint32_t packets;
+    ~p25p2_tdma();  // destructor
+    void set_xormask(const char*p);
+    bool rx_sym(uint8_t sym);
+    int handle_frame(void) ;
 private:
-	p25p2_sync sync;
-	p25p2_duid duid;
-	p25p2_vf vf;
-	int d_slotid;
-	mbe_parms cur_mp;
-	mbe_parms prev_mp;
-	mbe_parms enh_mp;
-	software_imbe_decoder software_decoder;
-	std::deque<int16_t> &output_queue_decode;
+    p25p2_sync sync;
+    p25p2_duid duid;
+    p25p2_vf vf;
+    int d_slotid;
+    mbe_parms cur_mp;
+    mbe_parms prev_mp;
+    mbe_parms enh_mp;
+    software_imbe_decoder software_decoder;
+    std::deque<int16_t> &output_queue_decode;
 
-	int d_debug;
-	unsigned long int crc_errors;
+    int d_debug;
+    unsigned long int crc_errors;
 
-	p25p2_framer p2framer;
+    p25p2_framer p2framer;
 
-	int handle_acch_frame(const uint8_t dibits[], bool fast) ;
-	void handle_voice_frame(const uint8_t dibits[]) ;
-	int process_mac_pdu(const uint8_t byte_buf[], unsigned int len) ;
+    int handle_acch_frame(const uint8_t dibits[], bool fast) ;
+    void handle_voice_frame(const uint8_t dibits[]) ;
+    int process_mac_pdu(const uint8_t byte_buf[], unsigned int len) ;
 };
 #endif /* INCLUDED_P25P2_TDMA_H */

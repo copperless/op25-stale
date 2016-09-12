@@ -25,42 +25,46 @@
 #include <iostream>
 #include "p25p2_sync.h"
 
-p25p2_sync::p25p2_sync(void) :	// constructor
-	sync_confidence(0),
-	_tdma_slotid(0),
-	packets(0)
+p25p2_sync::p25p2_sync(void) :  // constructor
+    sync_confidence(0),
+    _tdma_slotid(0),
+    packets(0)
 {
 }
 
 bool p25p2_sync::in_sync(void)
 {
-	return (sync_confidence != 0);
+    return (sync_confidence != 0);
 }
 
 void p25p2_sync::check_confidence (const uint8_t dibits[])
 {
-	static const int expected_sync[] = {0, 1, -2, -2, 4, 5, -2, -2, 8, 9, -2, -2};
-	_tdma_slotid ++;
-	packets++;
-	if (_tdma_slotid >= 12)
-		_tdma_slotid = 0;
-	int rc, cnt, fr, loc, chn, checkval;
-	rc = isch.isch_lookup(dibits);
-	checkval = cnt = fr = loc = chn = rc;
-	if (rc >= 0) {
-		cnt = rc & 3;
-		rc = rc >> 2;
-		fr = rc & 1;
-		rc = rc >> 1;
-		loc = rc & 3;
-		rc = rc >> 2;
-		chn = rc & 3;
-		checkval = loc*4 + chn;
-	}
-	if (expected_sync[_tdma_slotid] != checkval && checkval != -1)
-		sync_confidence = 0;
-	if (chn >= 0) {
-		sync_confidence = 1;
-		_tdma_slotid = checkval;
-	}
+    static const int expected_sync[] = {0, 1, -2, -2, 4, 5, -2, -2, 8, 9, -2, -2};
+    _tdma_slotid ++;
+    packets++;
+    if (_tdma_slotid >= 12)
+        _tdma_slotid = 0;
+    int rc, cnt, fr, loc, chn, checkval;
+    rc = isch.isch_lookup(dibits);
+    checkval = cnt = fr = loc = chn = rc;
+    if (rc >= 0)
+    {
+        cnt = rc & 3;
+        rc = rc >> 2;
+        fr = rc & 1;
+        rc = rc >> 1;
+        loc = rc & 3;
+        rc = rc >> 2;
+        chn = rc & 3;
+        checkval = loc*4 + chn;
+    }
+
+    if (expected_sync[_tdma_slotid] != checkval && checkval != -1)
+        sync_confidence = 0;
+
+    if (chn >= 0)
+    {
+        sync_confidence = 1;
+        _tdma_slotid = checkval;
+    }
 }

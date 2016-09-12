@@ -36,37 +36,38 @@ namespace gr {
   namespace op25_repeater {
 
     typedef std::vector<bool> bit_vector;
+
     class p25p1_voice_decode
     {
-     private:
-      // Nothing to declare in this block.
+    private:
+        // Nothing to declare in this block.
 
-     public:
-      p25p1_voice_decode(bool verbose_flag, const char* udp_host, int udp_port, std::deque<int16_t> &_output_queue);
-      ~p25p1_voice_decode();
-	void rxframe(const uint32_t u[]);
-	void rxchar(const char* c, int len);
+    public:
+        p25p1_voice_decode(bool verbose_flag, const char* udp_host, int udp_port, std::deque<int16_t> &_output_queue);
+        ~p25p1_voice_decode();
+        void rxframe(const uint32_t u[]);
+        void rxchar(const char* c, int len);
 
-  private:
-	static const int RXBUF_MAX = 80;
+    private:
+        static const int RXBUF_MAX = 80;
 
-	/* data items */
-	int write_sock;
-	struct sockaddr_in write_sock_addr;
-	int write_bufp;
-	char write_buf[512];
-	char rxbuf[RXBUF_MAX];
-	int rxbufp ;
-	imbe_vocoder vocoder;
-	software_imbe_decoder software_decoder;
-	bool d_software_imbe_decoder;
+        /* data items */
+        int write_sock;
+        struct sockaddr_in write_sock_addr;
+        int write_bufp;
+        char write_buf[512];
+        char rxbuf[RXBUF_MAX];
+        int rxbufp ;
+        imbe_vocoder vocoder;
+        software_imbe_decoder software_decoder;
+        bool d_software_imbe_decoder;
 
-	std::deque<int16_t> &output_queue;
+        std::deque<int16_t> &output_queue;
 
-	bool opt_verbose;
-	int opt_udp_port;
-	/* local methods */
-	void init_sock(const char* udp_host, int udp_port);
+        bool opt_verbose;
+        int opt_udp_port;
+        /* local methods */
+        void init_sock(const char* udp_host, int udp_port);
     };
 
   } // namespace op25_repeater

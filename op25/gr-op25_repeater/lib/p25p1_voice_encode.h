@@ -38,51 +38,51 @@ namespace gr {
     typedef std::vector<bool> bit_vector;
     class p25p1_voice_encode
     {
-     private:
-      // Nothing to declare in this block.
+    private:
+        // Nothing to declare in this block.
 
-     public:
-      p25p1_voice_encode(bool verbose_flag, int stretch_amt, char* udp_host, int udp_port, bool raw_vectors_flag, std::deque<uint8_t> &_output_queue);
-      ~p25p1_voice_encode();
-	void compress_samp(const int16_t * samp, int len);
+    public:
+        p25p1_voice_encode(bool verbose_flag, int stretch_amt, char* udp_host, int udp_port, bool raw_vectors_flag, std::deque<uint8_t> &_output_queue);
+        ~p25p1_voice_encode();
+        void compress_samp(const int16_t * samp, int len);
 
   private:
-	static const int RXBUF_MAX = 80;
+        static const int RXBUF_MAX = 80;
 
-	/* data items */
-	int frame_cnt ;
-	int write_sock;
-	struct sockaddr_in write_sock_addr;
-	int write_bufp;
-	char write_buf[512];
-	struct timeval tv;
-	struct timezone tz;
-	struct timeval oldtv;
-	int peak_amplitude;
-	int peak;
-	int samp_ct;
-	char rxbuf[RXBUF_MAX];
-	unsigned int codeword_ct ;
-	int16_t sampbuf[FRAME];
-	size_t sampbuf_ct ;
-	int stretch_count ;
-	bit_vector f_body;
-	imbe_vocoder vocoder;
+        /* data items */
+        int frame_cnt;
+        int write_sock;
+        struct sockaddr_in write_sock_addr;
+        int write_bufp;
+        char write_buf[512];
+        struct timeval tv;
+        struct timezone tz;
+        struct timeval oldtv;
+        int peak_amplitude;
+        int peak;
+        int samp_ct;
+        char rxbuf[RXBUF_MAX];
+        unsigned int codeword_ct;
+        int16_t sampbuf[FRAME];
+        size_t sampbuf_ct;
+        int stretch_count;
+        bit_vector f_body;
+        imbe_vocoder vocoder;
 
-	std::deque<uint8_t> &output_queue;
+        std::deque<uint8_t> &output_queue;
 
-	bool opt_dump_raw_vectors;
-	bool opt_verbose;
-	int opt_stretch_amt;
-	int opt_stretch_sign;
-	int opt_udp_port;
-	/* local methods */
-	void append_imbe_codeword(bit_vector& frame_body, int16_t frame_vector[], unsigned int& codeword_ct);
-	void compress_frame(int16_t snd[]);
-	void add_sample(int16_t samp);
-	void init_sock(char* udp_host, int udp_port);
+        bool opt_dump_raw_vectors;
+        bool opt_verbose;
+        int opt_stretch_amt;
+        int opt_stretch_sign;
+        int opt_udp_port;
+
+        /* local methods */
+        void append_imbe_codeword(bit_vector& frame_body, int16_t frame_vector[], unsigned int& codeword_ct);
+        void compress_frame(int16_t snd[]);
+        void add_sample(int16_t samp);
+        void init_sock(char* udp_host, int udp_port);
     };
-
   } // namespace op25_repeater
 } // namespace gr
 

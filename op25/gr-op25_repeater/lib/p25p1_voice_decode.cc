@@ -44,29 +44,31 @@
 namespace gr {
   namespace op25_repeater {
 
-static void clear_bits(bit_vector& v) {
-	for (size_t i=0; i<v.size(); i++) {
-		v[i]=0;
-	}
+static void clear_bits(bit_vector& v)
+{
+    for (size_t i=0; i<v.size(); i++)
+    {
+        v[i]=0;
+    }
 }
 
-p25p1_voice_decode::p25p1_voice_decode(bool verbose_flag, const char* udp_host, int udp_port, std::deque<int16_t> &_output_queue) :
-	write_sock(0),
-	write_bufp(0),
-	rxbufp(0),
-	output_queue(_output_queue),
-	opt_verbose(verbose_flag),
-	opt_udp_port(udp_port)
+    p25p1_voice_decode::p25p1_voice_decode(bool verbose_flag, const char* udp_host, int udp_port, std::deque<int16_t> &_output_queue) :
+        write_sock(0),
+        write_bufp(0),
+        rxbufp(0),
+        output_queue(_output_queue),
+        opt_verbose(verbose_flag),
+        opt_udp_port(udp_port)
     {
-	if (opt_udp_port != 0)
-		// remote UDP output
-		init_sock(udp_host, opt_udp_port);
+        if (opt_udp_port != 0)
+            // remote UDP output
+            init_sock(udp_host, opt_udp_port);
 
-	const char *p = getenv("IMBE");
-	if (p && strcasecmp(p, "soft") == 0)
-		d_software_imbe_decoder = true;
-	else
-		d_software_imbe_decoder = false;
+        const char *p = getenv("IMBE");
+        if (p && strcasecmp(p, "soft") == 0)
+            d_software_imbe_decoder = true;
+        else
+            d_software_imbe_decoder = false;
     }
 
     /*

@@ -47,12 +47,12 @@ namespace gr {
         (new vocoder_impl(encode_flag, verbose_flag, stretch_amt, udp_host, udp_port, raw_vectors_flag));
     }
 
-//////////////////////////////////////////////////////////////
-//	enc/dec		udp	operation
-//	dec		no	byte input; short output
-//	dec		yes	byte input; null output
-//	enc		no	short input; char output
-//	enc		yes	short input; null output
+    //////////////////////////////////////////////////////////////
+    //  enc/dec         udp     operation
+    //  dec             no      byte input; short output
+    //  dec             yes     byte input; null output
+    //  enc             no      short input; char output
+    //  enc             yes     short input; null output
 
 #define M_IN(encode_flag, udp_port)  (1)
 #define M_OUT(encode_flag, udp_port) ((udp_port) ? 0 : 1)
@@ -82,87 +82,91 @@ namespace gr {
     {
     }
 
-void
-vocoder_impl::forecast(int nof_output_items, gr_vector_int &nof_input_items_reqd)
-{
-   /* When encoding, this block consumes 8000 symbols/s and produces 4800
-    * samples/s. That's a sampling rate of 5/3 or 1.66667.
-    *
-    * When decoding, the block consumes one line of text per voice codeword.
-    * Each line of text is exactly 32 bytes.  It outputs 160 samples for each 
-    * codeword; the ratio is thus 32/160 = 0.2.
-    *
-    * Thanks to Matt Mills for catching a bug where this value wasn't set correctly
-    */
-   const size_t nof_inputs = nof_input_items_reqd.size();
-   const int nof_samples_reqd = (opt_encode_flag) ? (1.66667 * nof_output_items) : (0.2 * nof_output_items);
-   std::fill(&nof_input_items_reqd[0], &nof_input_items_reqd[nof_inputs], nof_samples_reqd);
-}
+    void
+    vocoder_impl::forecast(int nof_output_items, gr_vector_int &nof_input_items_reqd)
+    {
+        /* When encoding, this block consumes 8000 symbols/s and produces 4800
+         * samples/s. That's a sampling rate of 5/3 or 1.66667.
+         *
+         * When decoding, the block consumes one line of text per voice codeword.
+         * Each line of text is exactly 32 bytes.  It outputs 160 samples for each
+         * codeword; the ratio is thus 32/160 = 0.2.
+         *
+         * Thanks to Matt Mills for catching a bug where this value wasn't set correctly
+         */
+        const size_t nof_inputs = nof_input_items_reqd.size();
+        const int nof_samples_reqd = (opt_encode_flag) ? (1.66667 * nof_output_items) : (0.2 * nof_output_items);
+        std::fill(&nof_input_items_reqd[0], &nof_input_items_reqd[nof_inputs], nof_samples_reqd);
+    }
 
-int 
-vocoder_impl::general_work_decode (int noutput_items,
-			       gr_vector_int &ninput_items,
-			       gr_vector_const_void_star &input_items,
-			       gr_vector_void_star &output_items)
-{
-  const char *in = (const char *) input_items[0];
+    int
+    vocoder_impl::general_work_decode (int noutput_items,
+        gr_vector_int &ninput_items,
+        gr_vector_const_void_star &input_items,
+        gr_vector_void_star &output_items)
+    {
+        const char *in = (const char *) input_items[0];
 
-  p1voice_decode.rxchar(in, ninput_items[0]);
+        p1voice_decode.rxchar(in, ninput_items[0]);
 
-  // Tell runtime system how many input items we consumed on
-  // each input stream.
+        // Tell runtime system how many input items we consumed on
+        // each input stream.
 
-  consume_each (ninput_items[0]);
+        consume_each (ninput_items[0]);
 
-  uint16_t *out = reinterpret_cast<uint16_t*>(output_items[0]);
-  const int n = std::min(static_cast<int>(output_queue_decode.size()), noutput_items);
-  if(0 < n) {
-     copy(output_queue_decode.begin(), output_queue_decode.begin() + n, out);
-     output_queue_decode.erase(output_queue_decode.begin(), output_queue_decode.begin() + n);
-  }
-  // Tell runtime system how many output items we produced.
-  return n;
-}
+        uint16_t *out = reinterpret_cast<uint16_t*>(output_items[0]);
+        const int n = std::min(static_cast<int>(output_queue_decode.size()), noutput_items);
 
-int 
-vocoder_impl::general_work_encode (int noutput_items,
-			       gr_vector_int &ninput_items,
-			       gr_vector_const_void_star &input_items,
-			       gr_vector_void_star &output_items)
-{
-  const short *in = (const short *) input_items[0];
+        if(0 < n)
+        {
+            copy(output_queue_decode.begin(), output_queue_decode.begin() + n, out);
+            output_queue_decode.erase(output_queue_decode.begin(), output_queue_decode.begin() + n);
+        }
+        // Tell runtime system how many output items we produced.
+        return n;
+    }
 
-  p1voice_encode.compress_samp(in, ninput_items[0]);
+    int
+    vocoder_impl::general_work_encode (int noutput_items,
+        gr_vector_int &ninput_items,
+        gr_vector_const_void_star &input_items,
+        gr_vector_void_star &output_items)
+    {
+        const short *in = (const short *) input_items[0];
 
-  // Tell runtime system how many input items we consumed on
-  // each input stream.
+        p1voice_encode.compress_samp(in, ninput_items[0]);
 
-  consume_each (ninput_items[0]);
+        // Tell runtime system how many input items we consumed on
+        // each input stream.
 
-  if (opt_udp_port > 0)		// in udp option, we are a gr sink only
-    return 0;
+        consume_each (ninput_items[0]);
 
-  uint8_t *out = reinterpret_cast<uint8_t*>(output_items[0]);
-  const int n = std::min(static_cast<int>(output_queue.size()), noutput_items);
-  if(0 < n) {
-     copy(output_queue.begin(), output_queue.begin() + n, out);
-     output_queue.erase(output_queue.begin(), output_queue.begin() + n);
-  }
-  // Tell runtime system how many output items we produced.
-  return n;
-}
+        if (opt_udp_port > 0)  // in udp option, we are a gr sink only
+            return 0;
 
-int 
-vocoder_impl::general_work (int noutput_items,
-			       gr_vector_int &ninput_items,
-			       gr_vector_const_void_star &input_items,
-			       gr_vector_void_star &output_items)
-{
-	if (opt_encode_flag)
-		return general_work_encode(noutput_items, ninput_items, input_items, output_items);
-	else
-		return general_work_decode(noutput_items, ninput_items, input_items, output_items);
-}
+        uint8_t *out = reinterpret_cast<uint8_t*>(output_items[0]);
+        const int n = std::min(static_cast<int>(output_queue.size()), noutput_items);
+
+        if (0 < n)
+        {
+            copy(output_queue.begin(), output_queue.begin() + n, out);
+            output_queue.erase(output_queue.begin(), output_queue.begin() + n);
+        }
+        // Tell runtime system how many output items we produced.
+        return n;
+    }
+
+    int
+    vocoder_impl::general_work (int noutput_items,
+        gr_vector_int &ninput_items,
+        gr_vector_const_void_star &input_items,
+        gr_vector_void_star &output_items)
+    {
+        if (opt_encode_flag)
+            return general_work_encode(noutput_items, ninput_items, input_items, output_items);
+        else
+            return general_work_decode(noutput_items, ninput_items, input_items, output_items);
+    }
 
   } /* namespace op25_repeater */
 } /* namespace gr */

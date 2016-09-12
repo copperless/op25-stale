@@ -37,40 +37,38 @@ namespace gr {
 
     class vocoder_impl : public vocoder
     {
-     private:
-      // Nothing to declare in this block.
+    private:
+        // Nothing to declare in this block.
 
-     public:
-      vocoder_impl(bool encode_flag, bool verbose_flag, int stretch_amt, char* udp_host, int udp_port, bool raw_vectors_flag);
-      ~vocoder_impl();
+    public:
+        vocoder_impl(bool encode_flag, bool verbose_flag, int stretch_amt, char* udp_host, int udp_port, bool raw_vectors_flag);
+        ~vocoder_impl();
 
-      void forecast (int noutput_items, gr_vector_int &ninput_items_required);
+        void forecast (int noutput_items, gr_vector_int &ninput_items_required);
 
-      int general_work(int noutput_items,
-		       gr_vector_int &ninput_items,
-		       gr_vector_const_void_star &input_items,
-		       gr_vector_void_star &output_items);
+        int general_work(int noutput_items,
+            gr_vector_int &ninput_items,
+            gr_vector_const_void_star &input_items,
+            gr_vector_void_star &output_items);
 
-      int general_work_encode (int noutput_items,
-		    gr_vector_int &ninput_items,
-		    gr_vector_const_void_star &input_items,
-		    gr_vector_void_star &output_items);
-      int general_work_decode (int noutput_items,
-		    gr_vector_int &ninput_items,
-		    gr_vector_const_void_star &input_items,
-		    gr_vector_void_star &output_items);
+        int general_work_encode (int noutput_items,
+            gr_vector_int &ninput_items,
+            gr_vector_const_void_star &input_items,
+            gr_vector_void_star &output_items);
 
-  private:
+        int general_work_decode (int noutput_items,
+            gr_vector_int &ninput_items,
+            gr_vector_const_void_star &input_items,
+            gr_vector_void_star &output_items);
 
-	std::deque<uint8_t> output_queue;
-	std::deque<int16_t> output_queue_decode;
-	int opt_udp_port;
-	bool opt_encode_flag;
+    private:
+        std::deque<uint8_t> output_queue;
+        std::deque<int16_t> output_queue_decode;
+        int opt_udp_port;
+        bool opt_encode_flag;
         p25p1_voice_encode p1voice_encode;
         p25p1_voice_decode p1voice_decode;
-
     };
-
   } // namespace op25_repeater
 } // namespace gr
 

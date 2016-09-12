@@ -27,14 +27,14 @@ class p25p2_sync;
 class p25p2_sync
 {
 public:
-	p25p2_sync();	// constructor
-	p25p2_isch isch;
-	void check_confidence (const uint8_t dibits[]);
-	bool in_sync(void);
-	uint32_t tdma_slotid(void) { return _tdma_slotid; }
+    p25p2_sync();  // constructor
+    p25p2_isch isch;
+    void check_confidence (const uint8_t dibits[]);
+    bool in_sync(void);
+    uint32_t tdma_slotid(void) { return _tdma_slotid; }
 private:
-	int32_t	sync_confidence;
-	uint32_t _tdma_slotid;
-	uint32_t packets;
+    int32_t sync_confidence;
+    uint32_t _tdma_slotid;
+    uint32_t packets;
 };
 #endif /* INCLUDED_P25P2_SYNC_H */

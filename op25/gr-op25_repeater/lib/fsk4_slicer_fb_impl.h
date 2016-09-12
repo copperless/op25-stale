@@ -28,17 +28,17 @@ namespace gr {
 
     class fsk4_slicer_fb_impl : public fsk4_slicer_fb
     {
-     private:
-      float d_slice_levels[4];
+    private:
+        float d_slice_levels[4];
 
-     public:
-      fsk4_slicer_fb_impl(const std::vector<float> &slice_levels);
-      ~fsk4_slicer_fb_impl();
+    public:
+        fsk4_slicer_fb_impl(const std::vector<float> &slice_levels);
+        ~fsk4_slicer_fb_impl();
 
-      // Where all the action really happens
-      int work(int noutput_items,
-	       gr_vector_const_void_star &input_items,
-	       gr_vector_void_star &output_items);
+        // Where all the action really happens
+        int work(int noutput_items,
+            gr_vector_const_void_star &input_items,
+            gr_vector_void_star &output_items);
     };
 
   } // namespace op25_repeater

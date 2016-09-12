@@ -36,44 +36,45 @@ namespace gr {
   namespace op25_repeater {
     class p25p1_fdma
     {
-     private:
+    private:
 
-  void init_sock(const char* udp_host, int udp_port);
+        void init_sock(const char* udp_host, int udp_port);
 
-  // internal functions
-	typedef std::vector<bool> bit_vector;
-	bool header_codeword(uint64_t acc, uint32_t& nac, uint32_t& duid);
-	void proc_voice_unit(bit_vector& frame_body) ;
-	void process_duid(uint32_t const duid, uint32_t const nac, uint8_t const buf[], int const len);
-  // internal instance variables and state
-	int write_bufp;
-	int write_sock;
-	struct sockaddr_in write_sock_addr;
-	char write_buf[512];
-	const char* d_udp_host;
-	int d_port;
-	int d_debug;
-	bool d_do_imbe;
-	bool d_do_output;
-	bool d_do_msgq;
-	gr::msg_queue::sptr d_msg_queue;
-	std::deque<int16_t> &output_queue;
-	p25_framer* framer;
-	struct timeval last_qtime;
-	bool d_do_audio_output;
+        // internal functions
+        typedef std::vector<bool> bit_vector;
+        bool header_codeword(uint64_t acc, uint32_t& nac, uint32_t& duid);
+        void proc_voice_unit(bit_vector& frame_body) ;
+        void process_duid(uint32_t const duid, uint32_t const nac, uint8_t const buf[], int const len);
+
+        // internal instance variables and state
+        int write_bufp;
+        int write_sock;
+        struct sockaddr_in write_sock_addr;
+        char write_buf[512];
+        const char* d_udp_host;
+        int d_port;
+        int d_debug;
+        bool d_do_imbe;
+        bool d_do_output;
+        bool d_do_msgq;
+        gr::msg_queue::sptr d_msg_queue;
+        std::deque<int16_t> &output_queue;
+        p25_framer* framer;
+        struct timeval last_qtime;
+        bool d_do_audio_output;
         p25p1_voice_decode p1voice_decode;
 
-     public:
-	void rx_sym (const uint8_t *syms, int nsyms);
-      p25p1_fdma(const char* udp_host, int port, int debug, bool do_imbe, bool do_output, bool do_msgq, gr::msg_queue::sptr queue, std::deque<int16_t> &output_queue, bool do_audio_output);
-      ~p25p1_fdma();
+    public:
+        void rx_sym (const uint8_t *syms, int nsyms);
+        p25p1_fdma(const char* udp_host, int port, int debug, bool do_imbe, bool do_output, bool do_msgq, gr::msg_queue::sptr queue, std::deque<int16_t> &output_queue, bool do_audio_output);
+        ~p25p1_fdma();
 
-      // Where all the action really happens
+        // Where all the action really happens
 
-      int general_work(int noutput_items,
-		       gr_vector_int &ninput_items,
-		       gr_vector_const_void_star &input_items,
-		       gr_vector_void_star &output_items);
+        int general_work(int noutput_items,
+            gr_vector_int &ninput_items,
+            gr_vector_const_void_star &input_items,
+            gr_vector_void_star &output_items);
     };
   } // namespace
 } // namespace

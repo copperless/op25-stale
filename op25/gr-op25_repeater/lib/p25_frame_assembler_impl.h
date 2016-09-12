@@ -40,38 +40,38 @@ namespace gr {
 
     class p25_frame_assembler_impl : public p25_frame_assembler
     {
-     private:
-	bool d_do_imbe;
-	bool d_do_output;
-	p25p1_fdma p1fdma;
-	bool d_do_audio_output;
-	bool d_do_phase2_tdma;
-	p25p2_tdma p2tdma;
-	bool d_do_msgq;
-	gr::msg_queue::sptr d_msg_queue;
+    private:
+        bool d_do_imbe;
+        bool d_do_output;
+        p25p1_fdma p1fdma;
+        bool d_do_audio_output;
+        bool d_do_phase2_tdma;
+        p25p2_tdma p2tdma;
+        bool d_do_msgq;
+        gr::msg_queue::sptr d_msg_queue;
 
-  // internal functions
+        // internal functions
 
-    void p25p2_queue_msg(int duid);
-    void set_xormask(const char*p) ;
-    void set_slotid(int slotid) ;
-	typedef std::vector<bool> bit_vector;
-	std::deque<int16_t> output_queue;
+        void p25p2_queue_msg(int duid);
+        void set_xormask(const char*p) ;
+        void set_slotid(int slotid) ;
+        typedef std::vector<bool> bit_vector;
+        std::deque<int16_t> output_queue;
 
- public:
-   virtual void forecast(int nof_output_items, gr_vector_int &nof_input_items_reqd);
-      // Nothing to declare in this block.
+    public:
+        virtual void forecast(int nof_output_items, gr_vector_int &nof_input_items_reqd);
+        // Nothing to declare in this block.
 
-     public:
-      p25_frame_assembler_impl(const char* udp_host, int port, int debug, bool do_imbe, bool do_output, bool do_msgq, gr::msg_queue::sptr queue, bool do_audio_output, bool do_phase2_tdma);
-      ~p25_frame_assembler_impl();
+    public:
+        p25_frame_assembler_impl(const char* udp_host, int port, int debug, bool do_imbe, bool do_output, bool do_msgq, gr::msg_queue::sptr queue, bool do_audio_output, bool do_phase2_tdma);
+        ~p25_frame_assembler_impl();
 
-      // Where all the action really happens
+        // Where all the action really happens
 
-      int general_work(int noutput_items,
-		       gr_vector_int &ninput_items,
-		       gr_vector_const_void_star &input_items,
-		       gr_vector_void_star &output_items);
+        int general_work(int noutput_items,
+            gr_vector_int &ninput_items,
+            gr_vector_const_void_star &input_items,
+            gr_vector_void_star &output_items);
     };
 
   } // namespace op25_repeater

@@ -29,10 +29,10 @@ class p25p2_isch;
 class p25p2_isch
 {
 public:
-	p25p2_isch();	// constructor
-	int16_t isch_lookup(std::string codeword);
-	int16_t isch_lookup(const uint8_t dibits[]);
+    p25p2_isch();  // constructor
+    int16_t isch_lookup(std::string codeword);
+    int16_t isch_lookup(const uint8_t dibits[]);
 private:
-	std::map <std::string, int> isch_map;
+    std::map <std::string, int> isch_map;
 };
 #endif /* INCLUDED_P25P2_ISCH_H */

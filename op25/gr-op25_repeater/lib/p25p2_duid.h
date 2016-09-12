@@ -24,31 +24,31 @@
 #include <stdint.h>
 
 static const char* duid_strings[] = {
-	"4v",
-	"?1",
-	"?2",
-	"sacch w",
-	"?4",
-	"?5",
-	"2v",
-	"?7",
-	"?8",
-	"facch w",
-	"?10",
-	"?11"
-	"sacch w/o",
-	"?13",
-	"?14"
-	"facch w/o"
+    "4v",
+    "?1",
+    "?2",
+    "sacch w",
+    "?4",
+    "?5",
+    "2v",
+    "?7",
+    "?8",
+    "facch w",
+    "?10",
+    "?11"
+    "sacch w/o",
+    "?13",
+    "?14"
+    "facch w/o"
 };
 
 class p25p2_duid;
 class p25p2_duid
 {
 public:
-	p25p2_duid();	// constructor
-	int16_t duid_lookup(const uint8_t codeword);
-	uint8_t extract_duid(const uint8_t dibits[]);
+    p25p2_duid();  // constructor
+    int16_t duid_lookup(const uint8_t codeword);
+    uint8_t extract_duid(const uint8_t dibits[]);
 private:
 };
 #endif /* INCLUDED_P25P2_DUID_H */
